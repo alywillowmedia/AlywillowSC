@@ -1,0 +1,4 @@
+# Format
+# YYYY-MM-DD HH:MM UTC | migration_file.sql | environment | run_by | notes
+# Example:
+# 2026-03-07 19:30 UTC | 20260307190100_001_create_session_table.sql | prod | jonah | success
