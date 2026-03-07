@@ -1,0 +1,97 @@
+.stack {
+  display: grid;
+  gap: 12px;
+  max-width: 860px;
+}
+
+.colorGrid {
+  display: grid;
+  gap: 12px;
+  max-width: 860px;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.tierGrid {
+  display: grid;
+  gap: 14px;
+  max-width: 1000px;
+}
+
+.tierCard {
+  border: 1px solid #d8d8d8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.tierHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 12px;
+}
+
+.pickerRow {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.quickLabel {
+  color: #666;
+  font-size: 13px;
+  padding-bottom: 10px;
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.preview img {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #efefef;
+}
+
+.previewTitle {
+  font-weight: 600;
+}
+
+.previewMeta {
+  color: #666;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .colorGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+
+  .pickerRow {
+    grid-template-columns: 1fr;
+  }
+
+  .quickLabel {
+    padding-bottom: 0;
+  }
+}

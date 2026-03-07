@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model SlidecartSettings {
+  id                  Int             @id @default(autoincrement())
+  shop                String          @unique
+  enabled             Boolean         @default(true)
+  cartTitle           String          @default("Your Cart")
+  customText          String          @default("Choose ONE free gift! *Qualifying orders only.*")
+  progressIntro       String          @default("You're only [amount] away from getting [reward] for free!")
+  discountCtaNote     String          @default("Add discount code at checkout")
+  maxFreeGifts        Int             @default(1)
+  buttonFillColor     String          @default("#000000")
+  buttonTextColor     String          @default("#FFFFFF")
+  panelBackground     String          @default("#f3f3f3")
+  tiers               SlidecartTier[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+model SlidecartTier {
+  id                    Int               @id @default(autoincrement())
+  settingsId            Int
+  settings              SlidecartSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  tierIndex             Int
+  enabled               Boolean           @default(true)
+  requiredSubtotalCents Int
+  rewardLabel           String
+  giftVariantId         String
+  giftVariantGid        String?
+  giftTitle             String
+  giftImageUrl          String?
+  giftPrice             String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([settingsId, tierIndex])
+}

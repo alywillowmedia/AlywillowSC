@@ -1,0 +1,59 @@
+{% comment %}
+  App Block: Alywillow Slidecart
+{% endcomment %}
+
+<div id="awc-slidecart-root"
+  data-proxy-path="{{ block.settings.proxy_path | escape }}"
+  data-cart-title="{{ block.settings.cart_title | escape }}"
+  data-custom-text="{{ block.settings.custom_text | escape }}"
+  data-progress-intro="{{ block.settings.progress_intro | escape }}"
+  data-currency="{{ shop.currency }}"
+  data-tier-1-threshold="{{ block.settings.tier_1_threshold | times: 100 | round }}"
+  data-tier-1-label="{{ block.settings.tier_1_label | escape }}"
+  data-tier-1-variant-id="{{ block.settings.tier_1_variant_id | escape }}"
+  data-tier-2-threshold="{{ block.settings.tier_2_threshold | times: 100 | round }}"
+  data-tier-2-label="{{ block.settings.tier_2_label | escape }}"
+  data-tier-2-variant-id="{{ block.settings.tier_2_variant_id | escape }}"
+  data-tier-3-threshold="{{ block.settings.tier_3_threshold | times: 100 | round }}"
+  data-tier-3-label="{{ block.settings.tier_3_label | escape }}"
+  data-tier-3-variant-id="{{ block.settings.tier_3_variant_id | escape }}"
+  data-tier-4-threshold="{{ block.settings.tier_4_threshold | times: 100 | round }}"
+  data-tier-4-label="{{ block.settings.tier_4_label | escape }}"
+  data-tier-4-variant-id="{{ block.settings.tier_4_variant_id | escape }}">
+</div>
+
+{{ 'slidecart.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'slidecart.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Alywillow Slidecart",
+  "target": "body",
+  "settings": [
+    { "type": "text", "id": "proxy_path", "label": "Proxy Path", "default": "/apps/slidecart" },
+    { "type": "text", "id": "cart_title", "label": "Cart Title", "default": "Your Cart" },
+    { "type": "textarea", "id": "custom_text", "label": "Custom Text", "default": "Choose ONE free gift! *Qualifying orders only.*" },
+    { "type": "textarea", "id": "progress_intro", "label": "Progress Intro Text", "default": "You're only [amount] away from getting [reward] for free!" },
+
+    { "type": "header", "content": "Tier 1" },
+    { "type": "number", "id": "tier_1_threshold", "label": "Tier 1 Threshold ($)", "default": 75 },
+    { "type": "text", "id": "tier_1_label", "label": "Tier 1 Label", "default": "Stress Relief Inhaler" },
+    { "type": "text", "id": "tier_1_variant_id", "label": "Tier 1 Gift Variant ID", "default": "0" },
+
+    { "type": "header", "content": "Tier 2" },
+    { "type": "number", "id": "tier_2_threshold", "label": "Tier 2 Threshold ($)", "default": 100 },
+    { "type": "text", "id": "tier_2_label", "label": "Tier 2 Label", "default": "LL Bar" },
+    { "type": "text", "id": "tier_2_variant_id", "label": "Tier 2 Gift Variant ID", "default": "0" },
+
+    { "type": "header", "content": "Tier 3" },
+    { "type": "number", "id": "tier_3_threshold", "label": "Tier 3 Threshold ($)", "default": 150 },
+    { "type": "text", "id": "tier_3_label", "label": "Tier 3 Label", "default": "Sweet Magic Spritzer" },
+    { "type": "text", "id": "tier_3_variant_id", "label": "Tier 3 Gift Variant ID", "default": "0" },
+
+    { "type": "header", "content": "Tier 4" },
+    { "type": "number", "id": "tier_4_threshold", "label": "Tier 4 Threshold ($)", "default": 200 },
+    { "type": "text", "id": "tier_4_label", "label": "Tier 4 Label", "default": "Wildwood Level 5 Moisturizer" },
+    { "type": "text", "id": "tier_4_variant_id", "label": "Tier 4 Gift Variant ID", "default": "0" }
+  ]
+}
+{% endschema %}
