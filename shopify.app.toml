@@ -2,12 +2,11 @@
 
 client_id = "376961ab4587da764311acf4595fa503"
 name = "alywillow-slidecart"
-application_url = "https://example.com"
+application_url = "https://alywillowsc.vercel.app"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -25,9 +24,9 @@ api_version = "2026-04"
 scopes = "read_products,read_discounts,write_discounts,read_themes,write_themes"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://alywillowsc.vercel.app/api/auth", "https://alywillowsc.vercel.app/auth/callback" ]
 
 [app_proxy]
-url = "https://example.com/apps/slidecart"
+url = "https://alywillowsc.vercel.app/apps/slidecart"
 subpath = "slidecart"
 prefix = "apps"
