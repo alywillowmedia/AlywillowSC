@@ -13,6 +13,8 @@
   let lastUnlockedTierId = null;
   let lastFocusedBeforeOpen = null;
   let linesCollapsed = true;
+  let suppressThemeCartUntil = 0;
+  let suppressThemeCartTimer = null;
   const THEME_CART_SELECTORS = [
     'cart-drawer',
     '.cart-drawer',
@@ -388,6 +390,20 @@
     document.body.classList.remove('overflow-hidden', 'js-drawer-open', 'cart-open');
   }
 
+  function suppressThemeCartFor(ms = 1800) {
+    suppressThemeCartUntil = Math.max(suppressThemeCartUntil, Date.now() + ms);
+    closeThemeCartUIs();
+    if (suppressThemeCartTimer) return;
+    suppressThemeCartTimer = window.setInterval(() => {
+      if (Date.now() >= suppressThemeCartUntil) {
+        window.clearInterval(suppressThemeCartTimer);
+        suppressThemeCartTimer = null;
+        return;
+      }
+      closeThemeCartUIs();
+    }, 90);
+  }
+
   function haltEvent(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -415,6 +431,7 @@
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
       if (!form.action.includes('/cart/add')) return;
+      suppressThemeCartFor();
 
       // Do not manually add-to-cart here; themes/apps may already do AJAX add.
       // We only sync UI after the theme finishes cart mutation.
@@ -423,6 +440,49 @@
         openDrawer();
       }, 450);
     }, true);
+  }
+
+  function patchNetworkCartListeners(reload) {
+    if (!window.fetch || window.__awcFetchPatched) return;
+    window.__awcFetchPatched = true;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const input = args[0];
+      const url = typeof input === 'string'
+        ? input
+        : (input && typeof input.url === 'string' ? input.url : '');
+      const isCartAdd = typeof url === 'string' && /\/cart\/add(\.js)?(\?|$)/.test(url);
+      if (isCartAdd) suppressThemeCartFor();
+      const response = await nativeFetch(...args);
+      if (isCartAdd) {
+        setTimeout(async () => {
+          await reload();
+          openDrawer();
+        }, 120);
+      }
+      return response;
+    };
+
+    if (!window.XMLHttpRequest || window.__awcXhrPatched) return;
+    window.__awcXhrPatched = true;
+    const nativeOpen = XMLHttpRequest.prototype.open;
+    const nativeSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this.__awcIsCartAdd = typeof url === 'string' && /\/cart\/add(\.js)?(\?|$)/.test(url);
+      return nativeOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function(...sendArgs) {
+      if (this.__awcIsCartAdd) {
+        suppressThemeCartFor();
+        this.addEventListener('loadend', () => {
+          setTimeout(async () => {
+            await reload();
+            openDrawer();
+          }, 120);
+        }, { once: true });
+      }
+      return nativeSend.apply(this, sendArgs);
+    };
   }
 
   async function runCartOp(fn) {
@@ -755,6 +815,7 @@
 
     const reload = () => render(settings);
     bindCartTriggers(reload);
+    patchNetworkCartListeners(reload);
     document.addEventListener('keydown', trapFocusInDrawer);
 
     await reload();
