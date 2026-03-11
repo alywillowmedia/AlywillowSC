@@ -569,10 +569,13 @@
 
   async function enforceOneGift(cart) {
     const gifts = cart.items.filter(isGift);
-    if (gifts.length <= 1) return;
+    if (gifts.length <= 1) return false;
+    let didChange = false;
     for (let i = 1; i < gifts.length; i += 1) {
       await cartChangeById(gifts[i].key, 0);
+      didChange = true;
     }
+    return didChange;
   }
 
   function buildGiftButtons(settings, subtotal, selectedGift) {
@@ -614,9 +617,11 @@
   }
 
   async function render(settings) {
-    const cart = await cartGet();
-    await enforceOneGift(cart);
-    const currentCart = await cartGet();
+    let currentCart = await cartGet();
+    const changedGiftLines = await enforceOneGift(currentCart);
+    if (changedGiftLines) {
+      currentCart = await cartGet();
+    }
 
     const title = document.getElementById('awc-cart-title');
     if (title) title.textContent = `${settings.cartTitle} ${currentCart.item_count || 0}`;
@@ -747,11 +752,22 @@
           const delta = Number(button.getAttribute('data-qty-delta'));
           if (!line || !Number.isFinite(line)) return;
           const nextQty = Math.max(0, currentQty + delta);
+          if (!Number.isFinite(nextQty) || nextQty === currentQty) return;
+
+          const qtyLabel = row.querySelector('span');
+          row.setAttribute('data-qty', String(nextQty));
+          if (qtyLabel) qtyLabel.textContent = String(nextQty);
+          row.classList.add('is-updating');
+
           await runCartOp(async () => {
             debugLog('qty_click', { line, currentQty, delta, nextQty });
             const result = await cartChangeByLine(line, nextQty);
             debugLog('qty_change_result', { ok: result.ok, status: result.status });
-            await render(settings);
+            try {
+              await render(settings);
+            } finally {
+              if (row.isConnected) row.classList.remove('is-updating');
+            }
           });
         });
       });
