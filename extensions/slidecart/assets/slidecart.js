@@ -414,7 +414,7 @@
   function nodeListHasCartTrigger(nodes) {
     return nodes.some((node) => {
       if (!(node instanceof Element)) return false;
-      if (node.matches?.('#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart, [data-cart-toggle], [data-drawer-toggle=\"cart\"], [aria-controls*=\"cart\" i], [id*=\"cart\" i], [class*=\"cart\" i]')) {
+      if (node.matches?.('#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart, [data-cart-toggle], [data-drawer-toggle=\"cart\"], [aria-controls*=\"cart\" i]')) {
         return true;
       }
       if (node instanceof HTMLAnchorElement && typeof node.href === 'string' && /\/cart(\?|#|$)/.test(node.href)) {
@@ -427,6 +427,7 @@
   function isCartIntentEvent(event) {
     const target = event.target;
     if (!(target instanceof Element)) return false;
+    if (target.closest('#awc-slidecart, #awc-slidecart-overlay')) return false;
     const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
 
     const cartAnchor = target.closest('a[href*="/cart"]');
