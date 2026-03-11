@@ -28,5 +28,5 @@ redirect_urls = [ "https://alywillowsc.vercel.app/api/auth", "https://alywillows
 
 [app_proxy]
 url = "https://alywillowsc.vercel.app/apps/slidecart"
-subpath = "slidecart"
+subpath = "awc-slidecart"
 prefix = "apps"

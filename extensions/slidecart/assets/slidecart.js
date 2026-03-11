@@ -52,12 +52,12 @@
         variantId: Number(root.dataset[`tier${i}VariantId`] || root.getAttribute(`data-tier-${i}-variant-id`) || 0),
         title: root.dataset[`tier${i}Label`] || root.getAttribute(`data-tier-${i}-label`) || `Tier ${i} gift`
       }
-    })).filter((t) => t.requiredSubtotalCents > 0 && t.gift.variantId > 0);
+    })).filter((t) => t.requiredSubtotalCents > 0);
 
     tiers.sort((a, b) => a.requiredSubtotalCents - b.requiredSubtotalCents);
 
     return {
-      proxyPath: root.dataset.proxyPath || '/apps/slidecart',
+      proxyPath: root.dataset.proxyPath || '/apps/awc-slidecart',
       cartTitle: root.dataset.cartTitle || 'Your Cart',
       customText: root.dataset.customText || '',
       progressIntro: root.dataset.progressIntro || "You're only {{amount}} away from getting a {{reward}} for free!",
@@ -72,13 +72,21 @@
   }
 
   async function getProxyConfig(proxyPath) {
-    try {
-      const res = await fetch(proxyPath, { credentials: 'same-origin' });
-      if (!res.ok) return null;
-      return res.json();
-    } catch {
-      return null;
+    const paths = [...new Set([proxyPath, '/apps/awc-slidecart', '/apps/slidecart'])];
+
+    for (const path of paths) {
+      try {
+        const res = await fetch(path, { credentials: 'same-origin' });
+        if (!res.ok) continue;
+        const raw = await res.text();
+        if (!raw) continue;
+        const json = JSON.parse(raw);
+        if (json && typeof json === 'object') return json;
+      } catch {
+        // Keep trying fallback proxy paths.
+      }
     }
+    return null;
   }
 
   async function cartGet() {
