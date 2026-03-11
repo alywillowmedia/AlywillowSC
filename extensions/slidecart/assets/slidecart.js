@@ -412,24 +412,50 @@
     }
   }
 
+  function nodeListHasCartTrigger(nodes) {
+    return nodes.some((node) => {
+      if (!(node instanceof Element)) return false;
+      if (node.matches?.('#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart, [data-cart-toggle], [data-drawer-toggle=\"cart\"], [aria-controls*=\"cart\" i], [id*=\"cart\" i], [class*=\"cart\" i]')) {
+        return true;
+      }
+      if (node instanceof HTMLAnchorElement && typeof node.href === 'string' && /\/cart(\?|#|$)/.test(node.href)) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  function isCartIntentEvent(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+
+    const cartAnchor = target.closest('a[href*="/cart"]');
+    const cartButton = target.closest(
+      '#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart, [data-cart-toggle], [data-drawer-toggle="cart"]',
+    );
+    const ariaCart = target.closest('[aria-label*="cart" i], [title*="cart" i]');
+
+    return Boolean(cartAnchor || cartButton || ariaCart || nodeListHasCartTrigger(path));
+  }
+
   function bindCartTriggers(reload) {
     document.addEventListener('click', async (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-
-      const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
-      const pathMatch = path.find((node) => {
-        if (!(node instanceof Element)) return false;
-        return node.matches?.('#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart');
-      });
-      const cartAnchor = target.closest('a[href*="/cart"]');
-      const cartButton = target.closest('#cart-icon-bubble, [data-cart-icon], .site-header__cart, .header__icon--cart');
-
-      if (cartAnchor || cartButton || pathMatch) {
+      if (isCartIntentEvent(event)) {
         haltEvent(event);
+        suppressThemeCartFor();
         await reload();
         openDrawer();
       }
+    }, true);
+
+    document.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (!isCartIntentEvent(event)) return;
+      haltEvent(event);
+      suppressThemeCartFor();
+      await reload();
+      openDrawer();
     }, true);
 
     document.addEventListener('submit', async (event) => {
