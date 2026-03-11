@@ -417,10 +417,15 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
 
-      const cartAnchor = target.closest('a[href="/cart"], a[href*="/cart?"]');
-      const cartButton = target.closest('[data-cart-icon], .site-header__cart, .header__icon--cart');
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+      const pathMatch = path.find((node) => {
+        if (!(node instanceof Element)) return false;
+        return node.matches?.('#cart-icon-bubble, .header__icon--cart, [data-cart-icon], .site-header__cart');
+      });
+      const cartAnchor = target.closest('a[href*="/cart"]');
+      const cartButton = target.closest('#cart-icon-bubble, [data-cart-icon], .site-header__cart, .header__icon--cart');
 
-      if (cartAnchor || cartButton) {
+      if (cartAnchor || cartButton || pathMatch) {
         haltEvent(event);
         await reload();
         openDrawer();
