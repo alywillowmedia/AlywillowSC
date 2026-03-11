@@ -8,7 +8,11 @@ import {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const context = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
-  const shop = context.session?.shop || url.searchParams.get('shop');
+  const shop =
+    context.session?.shop ||
+    url.searchParams.get('shop') ||
+    request.headers.get('x-shopify-shop-domain') ||
+    request.headers.get('x-shop-domain');
 
   if (!shop) {
     throw new Response('Missing shop', { status: 400 });

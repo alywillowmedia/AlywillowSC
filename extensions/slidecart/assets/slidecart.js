@@ -72,7 +72,15 @@
   }
 
   async function getProxyConfig(proxyPath) {
-    const paths = [...new Set([proxyPath, '/apps/awc-slidecart', '/apps/slidecart'])];
+    const shopParam = encodeURIComponent(String(window.Shopify?.shop || ''));
+    const basePaths = [proxyPath, '/apps/awc-slidecart', '/apps/slidecart'];
+    const paths = [...new Set(basePaths.flatMap((path) => {
+      if (!path) return [];
+      const withShop = shopParam
+        ? `${path}${path.includes('?') ? '&' : '?'}shop=${shopParam}`
+        : path;
+      return [path, withShop];
+    }))];
 
     for (const path of paths) {
       try {
