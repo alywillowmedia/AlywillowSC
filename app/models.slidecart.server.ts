@@ -84,6 +84,11 @@ const DEFAULT_SETTINGS: Omit<SlidecartSettingsInput, 'tiers'> = {
   panelBackground: '#f3f3f3',
 };
 
+function gidToLegacyVariantId(gid: string) {
+  const raw = String(gid || '').split('/').pop() || '0';
+  return /^\d+$/.test(raw) ? Number(raw) : 0;
+}
+
 export async function getOrCreateSlidecartSettings(shop: string) {
   const existing = await prisma.slidecartSettings.findUnique({
     where: { shop },
@@ -163,11 +168,18 @@ export function settingsToProxyConfig(settings: Awaited<ReturnType<typeof getOrC
     tiers: settings.tiers
       .filter((tier) => tier.enabled)
       .map((tier) => ({
-        id: `tier-${tier.tierIndex}`,
-        requiredSubtotalCents: tier.requiredSubtotalCents,
+        // Support legacy rows where only giftVariantGid was stored.
+        // Frontend gift selection requires a numeric variantId.
+        variantId: Number(tier.giftVariantId || '0') > 0
+          ? Number(tier.giftVariantId || '0')
+          : gidToLegacyVariantId(tier.giftVariantGid || ''),
         rewardLabel: tier.rewardLabel,
+        requiredSubtotalCents: tier.requiredSubtotalCents,
+        id: `tier-${tier.tierIndex}`,
         gift: {
-          variantId: Number(tier.giftVariantId || '0'),
+          variantId: Number(tier.giftVariantId || '0') > 0
+            ? Number(tier.giftVariantId || '0')
+            : gidToLegacyVariantId(tier.giftVariantGid || ''),
           title: tier.giftTitle || tier.rewardLabel,
           image: tier.giftImageUrl || '',
           price: tier.giftPrice || '',
