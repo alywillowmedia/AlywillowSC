@@ -1,6 +1,5 @@
 (() => {
   if (window.__awcSlidecartInitialized) return;
-  window.__awcSlidecartInitialized = true;
 
   const ROOT_ID = 'awc-slidecart-root';
   const FREE_GIFT_PROP = '_awc_free_gift';
@@ -473,6 +472,28 @@
     }, true);
   }
 
+  function bindHeaderCartIconTrigger(reload) {
+    const cartIcon = document.querySelector('#cart-icon-bubble');
+    if (!(cartIcon instanceof HTMLElement)) return;
+    if (cartIcon.dataset.awcBound === '1') return;
+    cartIcon.dataset.awcBound = '1';
+
+    cartIcon.addEventListener('click', async (event) => {
+      haltEvent(event);
+      suppressThemeCartFor();
+      await reload();
+      openDrawer();
+    }, true);
+
+    cartIcon.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      haltEvent(event);
+      suppressThemeCartFor();
+      await reload();
+      openDrawer();
+    }, true);
+  }
+
   function patchNetworkCartListeners(reload) {
     if (!window.fetch || window.__awcFetchPatched) return;
     window.__awcFetchPatched = true;
@@ -814,6 +835,8 @@
   async function boot() {
     const root = document.getElementById(ROOT_ID);
     if (!root) return;
+    if (window.__awcSlidecartInitialized) return;
+    window.__awcSlidecartInitialized = true;
 
     const baseSettings = getSettings(root);
     const proxyConfig = await getProxyConfig(baseSettings.proxyPath);
@@ -846,6 +869,7 @@
 
     const reload = () => render(settings);
     bindCartTriggers(reload);
+    bindHeaderCartIconTrigger(reload);
     patchNetworkCartListeners(reload);
     document.addEventListener('keydown', trapFocusInDrawer);
 
