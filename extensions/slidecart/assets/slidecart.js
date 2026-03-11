@@ -289,13 +289,21 @@
       .replaceAll("'", '&#039;');
   }
 
+  function cleanVariantLabel(value) {
+    const normalized = String(value || '').trim();
+    if (!normalized) return '';
+    if (normalized.toLowerCase() === 'default title') return '';
+    return normalized;
+  }
+
   function splitGiftLabel(label) {
     const raw = String(label || '');
     const idx = raw.lastIndexOf(' - ');
     if (idx <= 0) return { title: raw, variant: '' };
+    const variant = cleanVariantLabel(raw.slice(idx + 3).trim());
     return {
       title: raw.slice(0, idx).trim(),
-      variant: raw.slice(idx + 3).trim(),
+      variant,
     };
   }
 
@@ -697,6 +705,7 @@
           const discount = lineDiscount(item);
           const lineNumber = (currentCart.items || []).findIndex((it) => it.key === item.key) + 1;
           const linePrice = isGift(item) ? '' : money(item.final_line_price, settings.currency);
+          const variantLabel = cleanVariantLabel(item.variant_title || '');
           const giftBadge = isGift(item)
             ? `
               <span class="awc-gift-badge awc-gift-badge-abs" aria-label="Free gift">
@@ -715,7 +724,7 @@
               <img src="${item.image || ''}" alt="${escapeHtml(item.product_title)}" />
               <div>
                 <div class="awc-line-title">${escapeHtml(item.product_title)}</div>
-                <div class="awc-line-meta">${escapeHtml(item.variant_title || '')}</div>
+                ${variantLabel ? `<div class="awc-line-meta">${escapeHtml(variantLabel)}</div>` : ''}
                 <div class="awc-qty" data-line="${lineNumber}" data-qty="${item.quantity}">
                   <button data-qty-delta="-1">-</button>
                   <span>${item.quantity}</span>
