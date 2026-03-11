@@ -839,16 +839,7 @@
     window.__awcSlidecartInitialized = true;
 
     const baseSettings = getSettings(root);
-    const proxyConfig = await getProxyConfig(baseSettings.proxyPath);
-    const settings = proxyConfig
-      ? {
-          ...baseSettings,
-          ...proxyConfig,
-          tiers: Array.isArray(proxyConfig.tiers) && proxyConfig.tiers.length
-            ? proxyConfig.tiers
-            : baseSettings.tiers
-        }
-      : baseSettings;
+    let settings = baseSettings;
     if (!settings.enabled) {
       return;
     }
@@ -874,6 +865,33 @@
     document.addEventListener('keydown', trapFocusInDrawer);
 
     await reload();
+
+    // Fetch proxy config after triggers are already active so first cart click is intercepted.
+    const proxyConfig = await getProxyConfig(baseSettings.proxyPath);
+    if (proxyConfig) {
+      settings = {
+        ...baseSettings,
+        ...proxyConfig,
+        tiers: Array.isArray(proxyConfig.tiers) && proxyConfig.tiers.length
+          ? proxyConfig.tiers
+          : baseSettings.tiers
+      };
+      if (!settings.enabled) {
+        closeDrawer();
+        return;
+      }
+      if (drawer) {
+        drawer.style.background = settings.panelBackground || '#f3f3f3';
+      }
+      if (checkout) {
+        checkout.style.background = settings.buttonFillColor || '#000000';
+        checkout.style.color = settings.buttonTextColor || '#ffffff';
+      }
+      if (note) {
+        note.textContent = settings.discountCtaNote || 'Add discount code at checkout';
+      }
+      await reload();
+    }
   }
 
   if (document.readyState === 'loading') {
