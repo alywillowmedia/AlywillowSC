@@ -264,9 +264,9 @@
 }
 
 .awc-gift-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin-top: 8px;
 }
 
@@ -278,42 +278,49 @@
 }
 
 .awc-gift-btn {
-  width: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  padding: 6px 12px 6px 6px;
+  width: 100%;
+  min-height: 108px;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  justify-items: start;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid #d2d2d2;
+  border-radius: 14px;
+  padding: 10px;
   background: #fff;
   cursor: pointer;
   margin-bottom: 0;
-  max-width: 100%;
+  text-align: left;
 }
 
 .awc-gift-btn img {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   border-radius: 999px;
   object-fit: cover;
 }
 
 .awc-gift-text {
   display: grid;
-  line-height: 1.05;
+  line-height: 1.15;
+  gap: 2px;
+  width: 100%;
 }
 
 .awc-gift-title {
-  font-size: 14px;
-  white-space: nowrap;
+  font-size: 16px;
+  white-space: normal;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .awc-gift-variant {
-  font-size: 11px;
+  font-size: 13px;
   color: #737373;
   font-style: italic;
-  margin-top: 2px;
-  white-space: nowrap;
+  margin-top: 0;
+  white-space: normal;
 }
 
 .awc-gift-btn.is-selected .awc-gift-variant {
@@ -324,6 +331,7 @@
   border-color: #111;
   background: #111;
   color: #fff;
+  box-shadow: 0 2px 10px rgba(17, 17, 17, 0.18);
 }
 
 .awc-gift-btn.is-soldout {
@@ -339,7 +347,8 @@
   border-radius: 999px;
   background: #f3dede;
   color: #8f1d1d;
-  margin-left: 4px;
+  margin-left: 0;
+  margin-top: 2px;
 }
 
 .awc-checkout {
