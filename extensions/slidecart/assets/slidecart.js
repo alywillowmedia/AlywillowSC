@@ -58,6 +58,7 @@
 
     return {
       proxyPath: root.dataset.proxyPath || '/apps/awc-slidecart',
+      appOrigin: root.dataset.appOrigin || 'https://alywillowsc.vercel.app',
       cartTitle: root.dataset.cartTitle || 'Your Cart',
       customText: root.dataset.customText || '',
       progressIntro: root.dataset.progressIntro || "You're only {{amount}} away from getting a {{reward}} for free!",
@@ -71,16 +72,19 @@
     };
   }
 
-  async function getProxyConfig(proxyPath) {
+  async function getProxyConfig(proxyPath, appOrigin) {
     const shopParam = encodeURIComponent(String(window.Shopify?.shop || ''));
     const basePaths = [proxyPath, '/apps/awc-slidecart', '/apps/slidecart'];
-    const paths = [...new Set(basePaths.flatMap((path) => {
+    const directUrl = shopParam
+      ? `${String(appOrigin || 'https://alywillowsc.vercel.app').replace(/\/$/, '')}/public/slidecart-config?shop=${shopParam}`
+      : '';
+    const paths = [...new Set([...basePaths.flatMap((path) => {
       if (!path) return [];
       const withShop = shopParam
         ? `${path}${path.includes('?') ? '&' : '?'}shop=${shopParam}`
         : path;
       return [path, withShop];
-    }))];
+    }), directUrl])];
 
     for (const path of paths) {
       try {
@@ -884,7 +888,7 @@
     await reload();
 
     // Fetch proxy config after triggers are already active so first cart click is intercepted.
-    const proxyConfig = await getProxyConfig(baseSettings.proxyPath);
+    const proxyConfig = await getProxyConfig(baseSettings.proxyPath, baseSettings.appOrigin);
     if (proxyConfig) {
       settings = {
         ...baseSettings,

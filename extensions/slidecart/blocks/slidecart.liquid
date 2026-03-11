@@ -4,6 +4,7 @@
 
 <div id="awc-slidecart-root"
   data-proxy-path="{{ block.settings.proxy_path | escape }}"
+  data-app-origin="{{ block.settings.app_origin | escape }}"
   data-cart-title="{{ block.settings.cart_title | escape }}"
   data-custom-text="{{ block.settings.custom_text | escape }}"
   data-progress-intro="{{ block.settings.progress_intro | escape }}"
@@ -31,6 +32,7 @@
   "target": "body",
   "settings": [
     { "type": "text", "id": "proxy_path", "label": "Proxy Path", "default": "/apps/awc-slidecart" },
+    { "type": "text", "id": "app_origin", "label": "App Origin", "default": "https://alywillowsc.vercel.app" },
     { "type": "text", "id": "cart_title", "label": "Cart Title", "default": "Your Cart" },
     { "type": "textarea", "id": "custom_text", "label": "Custom Text", "default": "Choose ONE free gift! *Qualifying orders only.*" },
     { "type": "textarea", "id": "progress_intro", "label": "Progress Intro Text", "default": "You're only [amount] away from getting [reward] for free!" },
