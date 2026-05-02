@@ -172,6 +172,8 @@ async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
   const config = buildFreeShippingFunctionConfig(settings);
   const hasFreeShippingTier = config.tiers.length > 0;
 
+  if (!hasFreeShippingTier) return;
+
   const existingResponse = await admin.graphql(`#graphql
     query SlidecartShippingDiscount {
       discountNodes(first: 25, query: "type:app method:automatic") {
@@ -193,8 +195,6 @@ async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
   const existingDiscount = (existingJson?.data?.discountNodes?.nodes ?? []).find((node: any) => {
     return node?.discount?.title === SHIPPING_DISCOUNT_TITLE;
   });
-
-  if (!hasFreeShippingTier && !existingDiscount?.id) return;
 
   const automaticAppDiscount = {
     title: SHIPPING_DISCOUNT_TITLE,
@@ -374,62 +374,67 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const formData = await request.formData();
-  const payloadText = String(formData.get('config_json') || '{}');
-
-  let payload: SettingsForm;
   try {
-    payload = JSON.parse(payloadText) as SettingsForm;
-  } catch {
-    return { ok: false, error: 'Invalid settings payload' } satisfies ActionData;
-  }
+    const { admin, session } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const payloadText = String(formData.get('config_json') || '{}');
 
-  const tiers = (payload.tiers || [])
-    .slice(0, 4)
-    .map((tier, index) => ({
-      tierIndex: index + 1,
-      enabled: Boolean(tier.enabled),
-      requiredSubtotalCents: Math.max(0, Number(tier.requiredSubtotalCents) || 0),
-      rewardLabel: String(tier.rewardLabel || `Tier ${index + 1}`),
-      rewardType: normalizeRewardType(tier.rewardType),
-      giftVariantId: String(tier.giftVariantId || '0'),
-      giftVariantGid: String(tier.giftVariantGid || ''),
-      giftTitle: String(tier.giftTitle || tier.rewardLabel || `Tier ${index + 1} Gift`),
-      giftImageUrl: String(tier.giftImageUrl || ''),
-      giftPrice: String(tier.giftPrice || ''),
-    }));
+    let payload: SettingsForm;
+    try {
+      payload = JSON.parse(payloadText) as SettingsForm;
+    } catch {
+      return { ok: false, error: 'Invalid settings payload' } satisfies ActionData;
+    }
 
-  if (tiers.length !== 4) {
-    return { ok: false, error: 'Exactly 4 tiers are required' } satisfies ActionData;
-  }
+    const tiers = (payload.tiers || [])
+      .slice(0, 4)
+      .map((tier, index) => ({
+        tierIndex: index + 1,
+        enabled: Boolean(tier.enabled),
+        requiredSubtotalCents: Math.max(0, Number(tier.requiredSubtotalCents) || 0),
+        rewardLabel: String(tier.rewardLabel || `Tier ${index + 1}`),
+        rewardType: normalizeRewardType(tier.rewardType),
+        giftVariantId: String(tier.giftVariantId || '0'),
+        giftVariantGid: String(tier.giftVariantGid || ''),
+        giftTitle: String(tier.giftTitle || tier.rewardLabel || `Tier ${index + 1} Gift`),
+        giftImageUrl: String(tier.giftImageUrl || ''),
+        giftPrice: String(tier.giftPrice || ''),
+      }));
 
-  const normalizedSettings = {
-    enabled: Boolean(payload.enabled),
-    cartTitle: String(payload.cartTitle || 'Your Cart'),
-    customText: String(payload.customText || ''),
-    progressIntro: String(payload.progressIntro || "You're only [amount] away from getting [reward] for free!"),
-    discountCtaNote: String(payload.discountCtaNote || 'Add discount code at checkout'),
-    maxFreeGifts: 1,
-    buttonFillColor: String(payload.buttonFillColor || '#000000'),
-    buttonTextColor: String(payload.buttonTextColor || '#FFFFFF'),
-    panelBackground: String(payload.panelBackground || '#f3f3f3'),
-    tiers,
-  };
+    if (tiers.length !== 4) {
+      return { ok: false, error: 'Exactly 4 tiers are required' } satisfies ActionData;
+    }
 
-  await saveSlidecartSettings(session.shop, normalizedSettings);
+    const normalizedSettings = {
+      enabled: Boolean(payload.enabled),
+      cartTitle: String(payload.cartTitle || 'Your Cart'),
+      customText: String(payload.customText || ''),
+      progressIntro: String(payload.progressIntro || "You're only [amount] away from getting [reward] for free!"),
+      discountCtaNote: String(payload.discountCtaNote || 'Add discount code at checkout'),
+      maxFreeGifts: 1,
+      buttonFillColor: String(payload.buttonFillColor || '#000000'),
+      buttonTextColor: String(payload.buttonTextColor || '#FFFFFF'),
+      panelBackground: String(payload.panelBackground || '#f3f3f3'),
+      tiers,
+    };
 
-  try {
-    await syncFreeShippingDiscount(admin, normalizedSettings);
+    await saveSlidecartSettings(session.shop, normalizedSettings);
+
+    try {
+      await syncFreeShippingDiscount(admin, normalizedSettings);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown Shopify discount sync error';
+      return {
+        ok: true,
+        warning: `Settings saved, but free shipping discount sync failed: ${message}`,
+      } satisfies ActionData;
+    }
+
+    return { ok: true } satisfies ActionData;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown Shopify discount sync error';
-    return {
-      ok: true,
-      warning: `Settings saved, but free shipping discount sync failed: ${message}`,
-    } satisfies ActionData;
+    const message = error instanceof Error ? error.message : 'Unknown server error';
+    return { ok: false, error: `Unable to save slidecart settings: ${message}` } satisfies ActionData;
   }
-
-  return { ok: true } satisfies ActionData;
 };
 
 export default function AppIndex() {
