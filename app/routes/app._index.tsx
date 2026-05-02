@@ -23,6 +23,7 @@ type TierForm = {
   enabled: boolean;
   requiredSubtotalCents: number;
   rewardLabel: string;
+  rewardType: string;
   giftVariantId: string;
   giftVariantGid: string;
   giftTitle: string;
@@ -53,6 +54,13 @@ type ActionData = {
   error?: string;
 };
 
+const REWARD_TYPE_GIFT = 'gift';
+const REWARD_TYPE_FREE_SHIPPING = 'free_shipping';
+const SHIPPING_DISCOUNT_TITLE = 'Alywillow Slidecart Free Shipping';
+const SHIPPING_DISCOUNT_FUNCTION_HANDLE = 'free-gift-discount';
+const SHIPPING_DISCOUNT_METAFIELD_NAMESPACE = '$app:free-gift-discount';
+const SHIPPING_DISCOUNT_METAFIELD_KEY = 'function-configuration';
+
 function toFormSettings(settings: Awaited<ReturnType<typeof getOrCreateSlidecartSettings>>): SettingsForm {
   return {
     enabled: settings.enabled,
@@ -69,6 +77,7 @@ function toFormSettings(settings: Awaited<ReturnType<typeof getOrCreateSlidecart
       enabled: tier.enabled,
       requiredSubtotalCents: tier.requiredSubtotalCents,
       rewardLabel: tier.rewardLabel,
+      rewardType: tier.rewardType || REWARD_TYPE_GIFT,
       giftVariantId: tier.giftVariantId,
       giftVariantGid: tier.giftVariantGid || '',
       giftTitle: tier.giftTitle,
@@ -84,21 +93,169 @@ function gidToLegacyId(gid: string) {
 }
 
 function extractImageUrl(value: any): string {
+  const firstImage = Array.isArray(value?.images)
+    ? value.images[0]
+    : value?.images?.edges?.[0]?.node;
+
   return String(
     value?.image?.url ||
       value?.image?.src ||
       value?.image?.originalSrc ||
+      value?.image?.transformedSrc ||
       value?.featuredImage?.url ||
       value?.featuredImage?.src ||
+      value?.featuredImage?.originalSrc ||
+      value?.featuredImage?.transformedSrc ||
+      value?.featured_image?.url ||
+      value?.featured_image?.src ||
+      value?.featured_image?.originalSrc ||
+      value?.featured_image?.transformedSrc ||
       value?.images?.[0]?.url ||
       value?.images?.[0]?.src ||
+      value?.images?.[0]?.originalSrc ||
+      value?.images?.[0]?.transformedSrc ||
       value?.images?.edges?.[0]?.node?.url ||
+      value?.images?.edges?.[0]?.node?.src ||
+      value?.images?.edges?.[0]?.node?.originalSrc ||
+      value?.images?.edges?.[0]?.node?.transformedSrc ||
+      firstImage?.url ||
+      firstImage?.src ||
+      firstImage?.originalSrc ||
+      firstImage?.transformedSrc ||
       '',
   );
 }
 
 function extractPrice(value: any): string {
   return String(value?.price?.amount || value?.price || '');
+}
+
+function variantOptionFromNode(variant: any, product: any): VariantOption | null {
+  if (!variant?.id) return null;
+  const productTitle = product?.title ?? variant?.product?.title ?? 'Product';
+  const variantTitle = variant?.title || 'Default';
+
+  return {
+    value: String(variant?.legacyResourceId ?? gidToLegacyId(String(variant.id || ''))),
+    gid: String(variant.id || ''),
+    label: `${productTitle} - ${variantTitle}`,
+    image: extractImageUrl({
+      image: variant?.image,
+      featuredImage: product?.featuredImage || variant?.product?.featuredImage,
+      images: product?.images || variant?.product?.images,
+    }),
+    price: extractPrice(variant),
+    available: Boolean(variant?.availableForSale ?? true),
+  };
+}
+
+function normalizeRewardType(value: unknown) {
+  return String(value || '') === REWARD_TYPE_FREE_SHIPPING
+    ? REWARD_TYPE_FREE_SHIPPING
+    : REWARD_TYPE_GIFT;
+}
+
+function buildFreeShippingFunctionConfig(settings: SettingsForm) {
+  return {
+    tiers: settings.tiers
+      .filter((tier) => tier.enabled && normalizeRewardType(tier.rewardType) === REWARD_TYPE_FREE_SHIPPING)
+      .map((tier) => ({
+        id: `tier-${tier.tierIndex}`,
+        requiredSubtotalCents: Math.max(0, Number(tier.requiredSubtotalCents) || 0),
+        rewardLabel: tier.rewardLabel || 'Free shipping',
+      })),
+  };
+}
+
+async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
+  const config = buildFreeShippingFunctionConfig(settings);
+  const hasFreeShippingTier = config.tiers.length > 0;
+
+  const existingResponse = await admin.graphql(`#graphql
+    query SlidecartShippingDiscount {
+      discountNodes(first: 25, query: "type:app method:automatic") {
+        nodes {
+          id
+          discount {
+            ... on DiscountAutomaticApp {
+              title
+            }
+          }
+        }
+      }
+    }
+  `);
+  const existingJson = await existingResponse.json();
+  const existingDiscount = (existingJson?.data?.discountNodes?.nodes ?? []).find((node: any) => {
+    return node?.discount?.title === SHIPPING_DISCOUNT_TITLE;
+  });
+
+  if (!hasFreeShippingTier && !existingDiscount?.id) return;
+
+  const automaticAppDiscount = {
+    title: SHIPPING_DISCOUNT_TITLE,
+    functionHandle: SHIPPING_DISCOUNT_FUNCTION_HANDLE,
+    discountClasses: ['SHIPPING'],
+    startsAt: new Date().toISOString(),
+    combinesWith: {
+      orderDiscounts: true,
+      productDiscounts: true,
+      shippingDiscounts: true,
+    },
+    metafields: [
+      {
+        namespace: SHIPPING_DISCOUNT_METAFIELD_NAMESPACE,
+        key: SHIPPING_DISCOUNT_METAFIELD_KEY,
+        type: 'json',
+        value: JSON.stringify(config),
+      },
+    ],
+  };
+
+  const mutation = existingDiscount?.id
+    ? `#graphql
+      mutation SlidecartUpdateShippingDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `
+    : `#graphql
+      mutation SlidecartCreateShippingDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+  const response = await admin.graphql(
+    mutation,
+    existingDiscount?.id
+      ? { variables: { id: existingDiscount.id, automaticAppDiscount } }
+      : { variables: { automaticAppDiscount } },
+  );
+  const json = await response.json();
+  const payload = existingDiscount?.id
+    ? json?.data?.discountAutomaticAppUpdate
+    : json?.data?.discountAutomaticAppCreate;
+  const userErrors = payload?.userErrors ?? [];
+  if (userErrors.length) {
+    throw new Error(userErrors.map((error: any) => error.message).join(', '));
+  }
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -144,25 +301,64 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const productsJson = await productsResponse.json();
 
-  const variantOptions: VariantOption[] =
+  const quickVariantOptions: VariantOption[] =
     productsJson?.data?.products?.edges?.flatMap((edge: any) => {
-      const productTitle = edge?.node?.title ?? 'Product';
-      return (edge?.node?.variants?.edges ?? []).map((variantEdge: any) => {
-        const variant = variantEdge?.node;
-        return {
-          value: String(variant?.legacyResourceId ?? gidToLegacyId(String(variant?.id || ''))),
-          gid: String(variant?.id || ''),
-          label: `${productTitle} - ${variant?.title || 'Default'}`,
-          image: extractImageUrl({
-            image: variant?.image,
-            featuredImage: edge?.node?.featuredImage,
-            images: edge?.node?.images,
-          }),
-          price: extractPrice(variant),
-          available: Boolean(variant?.availableForSale ?? true),
-        };
-      });
+      return (edge?.node?.variants?.edges ?? [])
+        .map((variantEdge: any) => variantOptionFromNode(variantEdge?.node, edge?.node))
+        .filter(Boolean);
     }) ?? [];
+
+  const selectedVariantGids = [
+    ...new Set(
+      settings.tiers
+        .map((tier) => String(tier.giftVariantGid || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  let selectedVariantOptions: VariantOption[] = [];
+  if (selectedVariantGids.length) {
+    const selectedResponse = await admin.graphql(
+      `#graphql
+        query SlidecartSelectedVariants($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on ProductVariant {
+              id
+              legacyResourceId
+              title
+              availableForSale
+              image {
+                url
+              }
+              price
+              product {
+                title
+                featuredImage {
+                  url
+                }
+                images(first: 1) {
+                  edges {
+                    node {
+                      url
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+      { variables: { ids: selectedVariantGids } },
+    );
+    const selectedJson = await selectedResponse.json();
+    selectedVariantOptions = (selectedJson?.data?.nodes ?? [])
+      .map((node: any) => variantOptionFromNode(node, node?.product))
+      .filter(Boolean);
+  }
+
+  const variantOptions = [...selectedVariantOptions, ...quickVariantOptions].filter((option, index, all) => {
+    return option && all.findIndex((candidate) => candidate.gid === option.gid) === index;
+  });
 
   return {
     settings: toFormSettings(settings),
@@ -171,7 +367,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const payloadText = String(formData.get('config_json') || '{}');
 
@@ -189,6 +385,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       enabled: Boolean(tier.enabled),
       requiredSubtotalCents: Math.max(0, Number(tier.requiredSubtotalCents) || 0),
       rewardLabel: String(tier.rewardLabel || `Tier ${index + 1}`),
+      rewardType: normalizeRewardType(tier.rewardType),
       giftVariantId: String(tier.giftVariantId || '0'),
       giftVariantGid: String(tier.giftVariantGid || ''),
       giftTitle: String(tier.giftTitle || tier.rewardLabel || `Tier ${index + 1} Gift`),
@@ -200,7 +397,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: false, error: 'Exactly 4 tiers are required' } satisfies ActionData;
   }
 
-  await saveSlidecartSettings(session.shop, {
+  const normalizedSettings = {
     enabled: Boolean(payload.enabled),
     cartTitle: String(payload.cartTitle || 'Your Cart'),
     customText: String(payload.customText || ''),
@@ -211,7 +408,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     buttonTextColor: String(payload.buttonTextColor || '#FFFFFF'),
     panelBackground: String(payload.panelBackground || '#f3f3f3'),
     tiers,
-  });
+  };
+
+  await saveSlidecartSettings(session.shop, normalizedSettings);
+  await syncFreeShippingDiscount(admin, normalizedSettings);
 
   return { ok: true } satisfies ActionData;
 };
@@ -238,6 +438,7 @@ export default function AppIndex() {
     setForm((current) => {
       let changed = false;
       const tiers = current.tiers.map((tier) => {
+        if (normalizeRewardType(tier.rewardType) === REWARD_TYPE_FREE_SHIPPING) return tier;
         const match = variantById.get(tier.giftVariantId) || variantByGid.get(tier.giftVariantGid);
         if (!match) return tier;
 
@@ -399,45 +600,81 @@ export default function AppIndex() {
                 />
               </div>
 
-              <div className={styles.pickerRow}>
-                <s-button onClick={() => pickTierGift(index)}>Search & select gift in Shopify</s-button>
-                <span className={styles.quickLabel}>or quick select:</span>
-                <s-select
-                  value={tier.giftVariantId}
-                  onChange={(e) => {
-                    const selected = variantOptions.find((v) => v.value === e.currentTarget.value);
-                    if (!selected) {
-                      updateTier(index, { giftVariantId: '0', giftVariantGid: '', giftTitle: '', giftImageUrl: '', giftPrice: '' });
-                      return;
-                    }
-                    updateTier(index, {
-                      giftVariantId: selected.value,
-                      giftVariantGid: selected.gid,
-                      giftTitle: selected.label,
-                      giftImageUrl: selected.image,
-                      giftPrice: selected.price,
-                    });
-                  }}
-                >
-                  <option value="0">Select variant</option>
-                  {variantOptions.map((option) => (
-                    <option key={`${tier.tierIndex}-${option.gid}`} value={option.value}>
-                      {option.label}{option.available ? '' : ' (Sold out)'}
-                    </option>
-                  ))}
-                </s-select>
-              </div>
-
-              <div className={styles.preview}>
-                <img
-                  src={tier.giftImageUrl || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png'}
-                  alt="Gift preview"
-                />
-                <div>
-                  <div className={styles.previewTitle}>{tier.giftTitle || 'No gift selected'}</div>
-                  <div className={styles.previewMeta}>{tier.giftPrice ? `$${tier.giftPrice}` : 'No price'}</div>
+              <div className={styles.rewardTypeRow}>
+                <div className={styles.fieldLabel}>Reward type</div>
+                <div className={styles.rewardTypeToggle}>
+                  <button
+                    type="button"
+                    className={`${styles.rewardTypeButton} ${
+                      normalizeRewardType(tier.rewardType) === REWARD_TYPE_GIFT ? styles.rewardTypeButtonActive : ''
+                    }`}
+                    onClick={() => updateTier(index, { rewardType: REWARD_TYPE_GIFT })}
+                  >
+                    Free gift
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.rewardTypeButton} ${
+                      normalizeRewardType(tier.rewardType) === REWARD_TYPE_FREE_SHIPPING ? styles.rewardTypeButtonActive : ''
+                    }`}
+                    onClick={() => updateTier(index, { rewardType: REWARD_TYPE_FREE_SHIPPING })}
+                  >
+                    Free shipping
+                  </button>
                 </div>
               </div>
+
+              {normalizeRewardType(tier.rewardType) === REWARD_TYPE_GIFT ? (
+                <>
+                  <div className={styles.pickerRow}>
+                    <s-button onClick={() => pickTierGift(index)}>Search & select gift in Shopify</s-button>
+                    <span className={styles.quickLabel}>or quick select:</span>
+                    <s-select
+                      value={tier.giftVariantId}
+                      onChange={(e) => {
+                        const selected = variantOptions.find((v) => v.value === e.currentTarget.value);
+                        if (!selected) {
+                          updateTier(index, { giftVariantId: '0', giftVariantGid: '', giftTitle: '', giftImageUrl: '', giftPrice: '' });
+                          return;
+                        }
+                        updateTier(index, {
+                          giftVariantId: selected.value,
+                          giftVariantGid: selected.gid,
+                          giftTitle: selected.label,
+                          giftImageUrl: selected.image,
+                          giftPrice: selected.price,
+                        });
+                      }}
+                    >
+                      <option value="0">Select variant</option>
+                      {variantOptions.map((option) => (
+                        <option key={`${tier.tierIndex}-${option.gid}`} value={option.value}>
+                          {option.label}{option.available ? '' : ' (Sold out)'}
+                        </option>
+                      ))}
+                    </s-select>
+                  </div>
+
+                  <div className={styles.preview}>
+                    <img
+                      src={tier.giftImageUrl || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_medium.png'}
+                      alt="Gift preview"
+                    />
+                    <div>
+                      <div className={styles.previewTitle}>{tier.giftTitle || 'No gift selected'}</div>
+                      <div className={styles.previewMeta}>{tier.giftPrice ? `$${tier.giftPrice}` : 'No price'}</div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.preview}>
+                  <div className={styles.shippingPreviewIcon}>%</div>
+                  <div>
+                    <div className={styles.previewTitle}>Free shipping</div>
+                    <div className={styles.previewMeta}>Unlocks at ${Math.round(tier.requiredSubtotalCents / 100)}</div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

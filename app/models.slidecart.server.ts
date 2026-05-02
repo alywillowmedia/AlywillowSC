@@ -5,6 +5,7 @@ export type SlidecartTierInput = {
   enabled: boolean;
   requiredSubtotalCents: number;
   rewardLabel: string;
+  rewardType: string;
   giftVariantId: string;
   giftVariantGid?: string;
   giftTitle: string;
@@ -31,6 +32,7 @@ const DEFAULT_TIERS: SlidecartTierInput[] = [
     enabled: true,
     requiredSubtotalCents: 7500,
     rewardLabel: 'Stress Relief Inhaler',
+    rewardType: 'gift',
     giftVariantId: '0',
     giftVariantGid: '',
     giftTitle: 'Stress Relief Inhaler',
@@ -42,6 +44,7 @@ const DEFAULT_TIERS: SlidecartTierInput[] = [
     enabled: true,
     requiredSubtotalCents: 10000,
     rewardLabel: 'LL Bar',
+    rewardType: 'gift',
     giftVariantId: '0',
     giftVariantGid: '',
     giftTitle: 'Lemon Laughs Nutrient Bar Cleanser',
@@ -53,6 +56,7 @@ const DEFAULT_TIERS: SlidecartTierInput[] = [
     enabled: true,
     requiredSubtotalCents: 15000,
     rewardLabel: 'Sweet Magic Spritzer',
+    rewardType: 'gift',
     giftVariantId: '0',
     giftVariantGid: '',
     giftTitle: 'Sweet Magic Spritzer',
@@ -64,6 +68,7 @@ const DEFAULT_TIERS: SlidecartTierInput[] = [
     enabled: true,
     requiredSubtotalCents: 20000,
     rewardLabel: 'Wildwood Level 5 Moisturizer',
+    rewardType: 'gift',
     giftVariantId: '0',
     giftVariantGid: '',
     giftTitle: 'Wildwood Level 5 Moisturizer',
@@ -139,6 +144,7 @@ export async function saveSlidecartSettings(shop: string, input: SlidecartSettin
         enabled: tier.enabled,
         requiredSubtotalCents: tier.requiredSubtotalCents,
         rewardLabel: tier.rewardLabel,
+        rewardType: tier.rewardType === 'free_shipping' ? 'free_shipping' : 'gift',
         giftVariantId: tier.giftVariantId,
         giftVariantGid: tier.giftVariantGid || '',
         giftTitle: tier.giftTitle,
@@ -174,6 +180,7 @@ export function settingsToProxyConfig(settings: Awaited<ReturnType<typeof getOrC
           ? Number(tier.giftVariantId || '0')
           : gidToLegacyVariantId(tier.giftVariantGid || ''),
         rewardLabel: tier.rewardLabel,
+        rewardType: tier.rewardType === 'free_shipping' ? 'free_shipping' : 'gift',
         requiredSubtotalCents: tier.requiredSubtotalCents,
         id: `tier-${tier.tierIndex}`,
         gift: {

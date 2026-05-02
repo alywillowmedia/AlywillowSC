@@ -5,6 +5,9 @@
   const FREE_GIFT_PROP = '_awc_free_gift';
   const DEBUG_MODE = new URLSearchParams(window.location.search).has('awc_debug');
   let cartOpQueue = Promise.resolve();
+  let internalCartMutationDepth = 0;
+  let optimisticMutationId = 0;
+  let latestRenderedCart = null;
   const debugState = [];
   let lastGiftError = '';
   const soldOutGiftVariantIds = new Set();
@@ -46,6 +49,7 @@
   function getSettings(root) {
     const tiers = [1, 2, 3, 4].map((i) => ({
       id: `tier-${i}`,
+      rewardType: 'gift',
       requiredSubtotalCents: Number(root.dataset[`tier${i}Threshold`] || root.getAttribute(`data-tier-${i}-threshold`) || 0),
       rewardLabel: root.dataset[`tier${i}Label`] || root.getAttribute(`data-tier-${i}-label`) || `Tier ${i}`,
       gift: {
@@ -108,59 +112,157 @@
   }
 
   async function cartChangeById(idOrKey, quantity) {
-    const res = await fetch('/cart/change.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: idOrKey, quantity })
+    return withInternalCartMutation(async () => {
+      const res = await fetch('/cart/change.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: idOrKey, quantity })
+      });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = { raw: text };
+      }
+      return { ok: res.ok, status: res.status, data: json };
     });
-    const text = await res.text();
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = { raw: text };
-    }
-    return { ok: res.ok, status: res.status, data: json };
   }
 
   async function cartChangeByLine(line, quantity) {
-    const res = await fetch('/cart/change.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ line, quantity })
+    return withInternalCartMutation(async () => {
+      const res = await fetch('/cart/change.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ line, quantity })
+      });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = { raw: text };
+      }
+      return { ok: res.ok, status: res.status, data: json };
     });
-    const text = await res.text();
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = { raw: text };
-    }
-    return { ok: res.ok, status: res.status, data: json };
   }
 
   async function cartAddGift(variantId) {
-    const res = await fetch('/cart/add.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: [{
-          id: Number(variantId),
-          quantity: 1,
-          properties: { [FREE_GIFT_PROP]: '1' }
-        }]
-      })
+    return withInternalCartMutation(async () => {
+      const res = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{
+            id: Number(variantId),
+            quantity: 1,
+            properties: { [FREE_GIFT_PROP]: '1' }
+          }]
+        })
+      });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = { raw: text };
+      }
+      const retryAfterHeader = res.headers.get('retry-after');
+      const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : 0;
+      return { ok: res.ok, status: res.status, data: json, retryAfterSeconds };
     });
-    const text = await res.text();
-    let json = null;
+  }
+
+  async function withInternalCartMutation(fn) {
+    internalCartMutationDepth += 1;
     try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = { raw: text };
+      return await fn();
+    } finally {
+      internalCartMutationDepth = Math.max(0, internalCartMutationDepth - 1);
     }
-    const retryAfterHeader = res.headers.get('retry-after');
-    const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : 0;
-    return { ok: res.ok, status: res.status, data: json, retryAfterSeconds };
+  }
+
+  function isCartPayload(value) {
+    return Boolean(value && typeof value === 'object' && Array.isArray(value.items));
+  }
+
+  function cloneCart(cart) {
+    if (!isCartPayload(cart)) return null;
+    try {
+      return JSON.parse(JSON.stringify(cart));
+    } catch {
+      return null;
+    }
+  }
+
+  function numericCents(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+  }
+
+  function unitCents(item, lineField, unitField) {
+    const unitValue = numericCents(item?.[unitField]);
+    if (unitValue > 0) return unitValue;
+    const qty = Math.max(1, numericCents(item?.quantity));
+    return Math.round(numericCents(item?.[lineField]) / qty);
+  }
+
+  function cartLevelDiscountCents(cart) {
+    return (cart?.cart_level_discount_applications || []).reduce((acc, discount) => {
+      return acc + numericCents(discount?.total_allocated_amount);
+    }, 0);
+  }
+
+  function recalculateCartTotals(cart) {
+    if (!isCartPayload(cart)) return cart;
+
+    const totals = cart.items.reduce((acc, item) => {
+      acc.itemCount += numericCents(item.quantity);
+      acc.original += numericCents(item.original_line_price || item.line_price || item.final_line_price);
+      acc.final += numericCents(item.final_line_price || item.line_price || item.original_line_price);
+      return acc;
+    }, { itemCount: 0, original: 0, final: 0 });
+
+    const cartDiscount = cartLevelDiscountCents(cart);
+    cart.item_count = totals.itemCount;
+    cart.items_subtotal_price = totals.original;
+    cart.original_total_price = totals.original;
+    cart.total_price = Math.max(0, totals.final - cartDiscount);
+    cart.total_discount = Math.max(0, totals.original - cart.total_price);
+    return cart;
+  }
+
+  function projectCartLineQuantity(cart, line, quantity) {
+    const nextCart = cloneCart(cart);
+    const index = Number(line) - 1;
+    const nextQty = Math.max(0, numericCents(quantity));
+    if (!nextCart || index < 0 || index >= nextCart.items.length) return null;
+
+    if (nextQty <= 0) {
+      nextCart.items.splice(index, 1);
+      return recalculateCartTotals(nextCart);
+    }
+
+    const item = nextCart.items[index];
+    const originalUnit = unitCents(item, 'original_line_price', 'original_price');
+    const finalUnit = unitCents(item, 'final_line_price', 'final_price');
+    const lineUnit = unitCents(item, 'line_price', 'price');
+
+    item.quantity = nextQty;
+    item.original_line_price = originalUnit * nextQty;
+    item.final_line_price = finalUnit * nextQty;
+    item.line_price = lineUnit * nextQty;
+    return recalculateCartTotals(nextCart);
+  }
+
+  function renderOptimisticCart(settings, cart) {
+    optimisticMutationId += 1;
+    render(settings, cart, { optimistic: true });
+    return optimisticMutationId;
+  }
+
+  function shouldRenderMutationResult(mutationId) {
+    return mutationId === optimisticMutationId;
   }
 
   function getProgress(subtotal, tiers) {
@@ -182,16 +284,12 @@
 
   function progressText(settings, progress) {
     if (!settings.tiers?.length) return 'Add items to start building your cart.';
-    if (!progress.next && progress.unlockedTier) return 'Free gift unlocked. Choose your gift.';
+    if (!progress.next && progress.unlocked) return 'All free gift tiers unlocked. Choose your favorite free gift.';
     if (!progress.next) return 'All free gifts unlocked.';
     if (progress.remaining <= 500) {
-      return `Almost there - only ${money(progress.remaining, settings.currency)} to unlock ${progress.next.rewardLabel}.`;
+      return `${money(progress.remaining, settings.currency)} more for ${progress.next.rewardLabel}.`;
     }
-    return settings.progressIntro
-      .replace('{{amount}}', money(progress.remaining, settings.currency))
-      .replace('{{reward}}', progress.next.rewardLabel)
-      .replace('[amount]', money(progress.remaining, settings.currency))
-      .replace('[reward]', progress.next.rewardLabel);
+    return `Add ${money(progress.remaining, settings.currency)} to unlock ${progress.next.rewardLabel}.`;
   }
 
   function lineDiscount(item) {
@@ -305,6 +403,11 @@
       title: raw.slice(0, idx).trim(),
       variant,
     };
+  }
+
+  function giftFallbackLabel(label) {
+    const normalized = String(label || '').trim();
+    return (normalized.charAt(0) || '?').toUpperCase();
   }
 
   function buildShell() {
@@ -532,13 +635,14 @@
       const url = typeof input === 'string'
         ? input
         : (input && typeof input.url === 'string' ? input.url : '');
-      const isCartAdd = typeof url === 'string' && /\/cart\/add(\.js)?(\?|$)/.test(url);
-      if (isCartAdd) suppressThemeCartFor();
+      const isCartMutation = typeof url === 'string' && /\/cart\/(add|change|update|clear)(\.js)?(\?|$)/.test(url);
+      const shouldSync = isCartMutation && internalCartMutationDepth === 0;
+      if (shouldSync && /\/cart\/add(\.js)?(\?|$)/.test(url)) suppressThemeCartFor();
       const response = await nativeFetch(...args);
-      if (isCartAdd) {
+      if (shouldSync) {
         setTimeout(async () => {
           await reload();
-          openDrawer();
+          if (/\/cart\/add(\.js)?(\?|$)/.test(url)) openDrawer();
         }, 120);
       }
       return response;
@@ -549,16 +653,18 @@
     const nativeOpen = XMLHttpRequest.prototype.open;
     const nativeSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-      this.__awcIsCartAdd = typeof url === 'string' && /\/cart\/add(\.js)?(\?|$)/.test(url);
+      this.__awcCartMutationUrl = typeof url === 'string' && /\/cart\/(add|change|update|clear)(\.js)?(\?|$)/.test(url)
+        ? url
+        : '';
       return nativeOpen.call(this, method, url, ...rest);
     };
     XMLHttpRequest.prototype.send = function(...sendArgs) {
-      if (this.__awcIsCartAdd) {
-        suppressThemeCartFor();
+      if (this.__awcCartMutationUrl) {
+        if (/\/cart\/add(\.js)?(\?|$)/.test(this.__awcCartMutationUrl)) suppressThemeCartFor();
         this.addEventListener('loadend', () => {
           setTimeout(async () => {
             await reload();
-            openDrawer();
+            if (/\/cart\/add(\.js)?(\?|$)/.test(this.__awcCartMutationUrl)) openDrawer();
           }, 120);
         }, { once: true });
       }
@@ -587,7 +693,11 @@
   }
 
   function buildGiftButtons(settings, subtotal, selectedGift) {
-    const eligible = settings.tiers.filter((tier) => subtotal >= tier.requiredSubtotalCents && Number(tier?.gift?.variantId) > 0);
+    const eligible = settings.tiers.filter((tier) => {
+      return tier?.rewardType !== 'free_shipping'
+        && subtotal >= tier.requiredSubtotalCents
+        && Number(tier?.gift?.variantId) > 0;
+    });
     if (!eligible.length) return '';
     const ordered = eligible.sort((a, b) => {
       if (Number(a.gift.variantId) === selectedGift) return -1;
@@ -597,7 +707,7 @@
 
     return `
       <div class="awc-gifts">
-        <strong>Choose one free gift:</strong>
+        <strong>Free gift:</strong>
         ${lastGiftError ? `<div class="awc-gift-error">${escapeHtml(lastGiftError)}</div>` : ''}
         <div class="awc-gift-row">
           ${ordered.map((tier) => `
@@ -609,7 +719,9 @@
               data-gift-variant-id="${tier.gift.variantId}"
               ${soldOutGiftVariantIds.has(Number(tier.gift.variantId)) || Date.now() < giftRateLimitUntil ? 'disabled aria-disabled="true"' : ''}
             >
-              ${tier?.gift?.image ? `<img src="${escapeHtml(tier.gift.image)}" alt="${escapeHtml(tier.gift.title)}" />` : ''}
+              ${tier?.gift?.image
+                ? `<img src="${escapeHtml(tier.gift.image)}" alt="${escapeHtml(tier.gift.title)}" />`
+                : `<span class="awc-gift-img-fallback" aria-hidden="true">${escapeHtml(giftFallbackLabel(parts.title || tier.gift.title))}</span>`}
               <span class="awc-gift-text">
                 <span class="awc-gift-title">${escapeHtml(parts.title || tier.gift.title)}</span>
                 ${parts.variant ? `<span class="awc-gift-variant">${escapeHtml(parts.variant)}</span>` : ''}
@@ -624,12 +736,15 @@
     `;
   }
 
-  async function render(settings) {
-    let currentCart = await cartGet();
-    const changedGiftLines = await enforceOneGift(currentCart);
-    if (changedGiftLines) {
-      currentCart = await cartGet();
+  async function render(settings, cartOverride = null, options = {}) {
+    let currentCart = isCartPayload(cartOverride) ? cartOverride : await cartGet();
+    if (!options.optimistic) {
+      const changedGiftLines = await enforceOneGift(currentCart);
+      if (changedGiftLines) {
+        currentCart = await cartGet();
+      }
     }
+    latestRenderedCart = currentCart;
 
     const title = document.getElementById('awc-cart-title');
     if (title) title.textContent = `${settings.cartTitle} ${currentCart.item_count || 0}`;
@@ -637,10 +752,10 @@
     const subtotal = Number(currentCart.items_subtotal_price || 0);
     const progress = getProgress(subtotal, settings.tiers);
     const justUnlockedTierId =
-      progress.unlockedTier?.id && progress.unlockedTier.id !== lastUnlockedTierId
-        ? progress.unlockedTier.id
+      progress.unlocked?.id && progress.unlocked.id !== lastUnlockedTierId
+        ? progress.unlocked.id
         : null;
-    lastUnlockedTierId = progress.unlockedTier?.id || null;
+    lastUnlockedTierId = progress.unlocked?.id || null;
 
     const progressTextEl = document.getElementById('awc-progress-text');
     if (progressTextEl) progressTextEl.textContent = progressText(settings, progress);
@@ -708,7 +823,7 @@
           const variantLabel = cleanVariantLabel(item.variant_title || '');
           const giftBadge = isGift(item)
             ? `
-              <span class="awc-gift-badge awc-gift-badge-abs" aria-label="Free gift">
+              <span class="awc-gift-badge" aria-label="Free gift">
                 <span class="awc-gift-badge-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="12" height="12" focusable="false" aria-hidden="true">
                     <path fill="currentColor" d="M20 7h-2.2a2.8 2.8 0 0 0 .2-1c0-1.66-1.34-3-3-3-1.23 0-2.3.75-2.76 1.82A2.99 2.99 0 0 0 9.5 3C7.84 3 6.5 4.34 6.5 6c0 .35.06.69.17 1H4a1 1 0 0 0-1 1v3c0 .55.45 1 1 1h1v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7h1a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1Zm-5-2a1 1 0 1 1 0 2h-2V6a1 1 0 0 1 2-1Zm-6.5 1a1 1 0 0 1 2 0v1h-2a1 1 0 0 1 0-2ZM5 9h6v2H5V9Zm2 4h4v6H7v-6Zm10 6h-4v-6h4v6Zm2-8h-6V9h6v2Z"/>
@@ -720,19 +835,28 @@
             : '';
           return `
             <div class="awc-line">
-              ${giftBadge}
-              <img src="${item.image || ''}" alt="${escapeHtml(item.product_title)}" />
-              <div>
-                <div class="awc-line-title">${escapeHtml(item.product_title)}</div>
+              <img src="${escapeHtml(item.image || '')}" alt="${escapeHtml(item.product_title)}" />
+              <div class="awc-line-main">
+                <div class="awc-line-title-row">
+                  <div class="awc-line-title">${escapeHtml(item.product_title)}</div>
+                  ${giftBadge}
+                </div>
                 ${variantLabel ? `<div class="awc-line-meta">${escapeHtml(variantLabel)}</div>` : ''}
-                <div class="awc-qty" data-line="${lineNumber}" data-qty="${item.quantity}">
-                  <button data-qty-delta="-1">-</button>
+                <div class="awc-qty" data-line="${lineNumber}" data-line-key="${escapeHtml(item.key || '')}" data-qty="${item.quantity}">
+                  <button type="button" data-qty-delta="-1" aria-label="Decrease quantity">-</button>
                   <span>${item.quantity}</span>
-                  <button data-qty-delta="1">+</button>
+                  <button type="button" data-qty-delta="1" aria-label="Increase quantity">+</button>
                 </div>
                 ${discount > 0 ? `<div class="awc-line-discount">Discount: -${money(discount, settings.currency)}</div>` : ''}
               </div>
-              <div>${linePrice}</div>
+              <div class="awc-line-side">
+                <button type="button" class="awc-line-remove" data-remove-line="${lineNumber}" data-line-key="${escapeHtml(item.key || '')}" aria-label="Remove ${escapeHtml(item.product_title)} from cart">
+                  <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                    <path fill="currentColor" d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7H4V5h4V4a1 1 0 0 1 1-1Zm2 2v0h2v0h-2ZM7 7v13h10V7H7Zm3 3h2v7h-2v-7Zm4 0h2v7h-2v-7Z"/>
+                  </svg>
+                </button>
+                <div class="awc-line-price">${linePrice}</div>
+              </div>
             </div>
           `;
         }).join('') + (shouldCollapse ? `
@@ -757,25 +881,65 @@
           const row = button.closest('.awc-qty');
           if (!row) return;
           const line = Number(row.getAttribute('data-line'));
+          const lineKey = row.getAttribute('data-line-key') || '';
           const currentQty = Number(row.getAttribute('data-qty') || 0);
           const delta = Number(button.getAttribute('data-qty-delta'));
           if (!line || !Number.isFinite(line)) return;
           const nextQty = Math.max(0, currentQty + delta);
           if (!Number.isFinite(nextQty) || nextQty === currentQty) return;
 
-          const qtyLabel = row.querySelector('span');
-          row.setAttribute('data-qty', String(nextQty));
-          if (qtyLabel) qtyLabel.textContent = String(nextQty);
-          row.classList.add('is-updating');
+          const projectedCart = projectCartLineQuantity(latestRenderedCart || currentCart, line, nextQty);
+          const mutationId = projectedCart
+            ? renderOptimisticCart(settings, projectedCart)
+            : optimisticMutationId;
 
           await runCartOp(async () => {
             debugLog('qty_click', { line, currentQty, delta, nextQty });
-            const result = await cartChangeByLine(line, nextQty);
-            debugLog('qty_change_result', { ok: result.ok, status: result.status });
             try {
-              await render(settings);
+              const result = lineKey
+                ? await cartChangeById(lineKey, nextQty)
+                : await cartChangeByLine(line, nextQty);
+              debugLog('qty_change_result', { ok: result.ok, status: result.status });
+              if (shouldRenderMutationResult(mutationId)) {
+                await render(settings, result.ok && isCartPayload(result.data) ? result.data : null);
+              }
             } finally {
-              if (row.isConnected) row.classList.remove('is-updating');
+              if (row.isConnected) {
+                row.classList.remove('is-updating');
+                row.querySelectorAll('button').forEach((qtyButton) => {
+                  qtyButton.removeAttribute('disabled');
+                });
+              }
+            }
+          });
+        });
+      });
+
+      lines.querySelectorAll('[data-remove-line]').forEach((el) => {
+        el.addEventListener('click', async () => {
+          const button = el;
+          const line = Number(button.getAttribute('data-remove-line'));
+          const lineKey = button.getAttribute('data-line-key') || '';
+          const itemRow = button.closest('.awc-line');
+          if (!line || !Number.isFinite(line)) return;
+          const projectedCart = projectCartLineQuantity(latestRenderedCart || currentCart, line, 0);
+          const mutationId = projectedCart
+            ? renderOptimisticCart(settings, projectedCart)
+            : optimisticMutationId;
+
+          await runCartOp(async () => {
+            debugLog('remove_click', { line });
+            try {
+              const result = lineKey
+                ? await cartChangeById(lineKey, 0)
+                : await cartChangeByLine(line, 0);
+              debugLog('remove_result', { ok: result.ok, status: result.status });
+              if (shouldRenderMutationResult(mutationId)) {
+                await render(settings, result.ok && isCartPayload(result.data) ? result.data : null);
+              }
+            } finally {
+              if (itemRow?.isConnected) itemRow.classList.remove('is-removing');
+              if (button.isConnected) button.removeAttribute('disabled');
             }
           });
         });
@@ -837,6 +1001,7 @@
             soldOutGiftVariantIds.delete(variantId);
 
             // Only remove prior gift after new gift is confirmed added.
+            let cartAfterGiftChange = null;
             if (existingGift) {
               const removeResult = await cartChangeById(existingGift.key, 0);
               debugLog('gift_remove_result', {
@@ -845,14 +1010,17 @@
                 description: removeResult.data?.description || null,
                 message: removeResult.data?.message || null
               });
+              if (removeResult.ok && isCartPayload(removeResult.data)) {
+                cartAfterGiftChange = removeResult.data;
+              }
             }
-            const postCart = await cartGet();
+            const postCart = cartAfterGiftChange || await cartGet();
             debugLog('post_cart_gifts', {
               giftVariantIds: (postCart.items || []).filter(isGift).map((i) => i.variant_id),
               itemCount: postCart.item_count,
               subtotal: postCart.items_subtotal_price
             });
-            await render(settings);
+            await render(settings, postCart);
           });
         });
       });
@@ -866,10 +1034,7 @@
         : 'All free gift tiers unlocked';
     }
     if (subtotalEl) {
-      const cartLevelDiscount = (currentCart.cart_level_discount_applications || []).reduce((acc, d) => {
-        const amount = Number(d.total_allocated_amount || 0);
-        return acc + Math.round(amount * 100);
-      }, 0);
+      const cartLevelDiscount = cartLevelDiscountCents(currentCart);
 
       subtotalEl.innerHTML = `
         <div><strong>Subtotal:</strong> ${money(currentCart.total_price, settings.currency)}</div>
@@ -904,7 +1069,25 @@
       note.textContent = settings.discountCtaNote || 'Add discount code at checkout';
     }
 
-    const reload = () => render(settings);
+    let reloadInFlight = null;
+    let reloadAgain = false;
+    const reload = (cartOverride = null) => {
+      if (cartOverride) return render(settings, cartOverride);
+      if (reloadInFlight) {
+        reloadAgain = true;
+        return reloadInFlight;
+      }
+      reloadInFlight = render(settings)
+        .finally(() => {
+          reloadInFlight = null;
+        })
+        .then(() => {
+          if (!reloadAgain) return undefined;
+          reloadAgain = false;
+          return reload();
+        });
+      return reloadInFlight;
+    };
     bindCartTriggers(reload);
     bindHeaderCartIconTrigger(reload);
     patchNetworkCartListeners(reload);

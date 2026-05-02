@@ -61,6 +61,7 @@ model SlidecartTier {
   enabled               Boolean           @default(true)
   requiredSubtotalCents Int
   rewardLabel           String
+  rewardType            String            @default("gift")
   giftVariantId         String
   giftVariantGid        String?
   giftTitle             String

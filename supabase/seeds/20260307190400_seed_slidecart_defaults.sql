@@ -40,7 +40,7 @@ with upsert_settings as (
 )
 insert into "SlidecartTier" (
   "settingsId", "tierIndex", enabled, "requiredSubtotalCents", "rewardLabel",
-  "giftVariantId", "giftVariantGid", "giftTitle", "giftImageUrl", "giftPrice"
+  "rewardType", "giftVariantId", "giftVariantGid", "giftTitle", "giftImageUrl", "giftPrice"
 )
 select
   id,
@@ -48,6 +48,7 @@ select
   true,
   t.required_subtotal_cents,
   t.reward_label,
+  'gift',
   '0',
   null,
   t.reward_label,
@@ -64,4 +65,5 @@ cross join (
 on conflict ("settingsId", "tierIndex") do update set
   "requiredSubtotalCents" = excluded."requiredSubtotalCents",
   "rewardLabel" = excluded."rewardLabel",
+  "rewardType" = excluded."rewardType",
   "updatedAt" = now();

@@ -1,10 +1,18 @@
 query DeliveryInput {
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     deliveryGroups {
       id
     }
   }
   discount {
     discountClasses
+    metafield(namespace: "$app:free-gift-discount", key: "function-configuration") {
+      jsonValue
+    }
   }
 }

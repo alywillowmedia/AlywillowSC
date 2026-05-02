@@ -5,6 +5,7 @@ create table if not exists "SlidecartTier" (
   enabled boolean not null default true,
   "requiredSubtotalCents" integer not null,
   "rewardLabel" text not null,
+  "rewardType" text not null default 'gift',
   "giftVariantId" text not null,
   "giftVariantGid" text,
   "giftTitle" text not null,

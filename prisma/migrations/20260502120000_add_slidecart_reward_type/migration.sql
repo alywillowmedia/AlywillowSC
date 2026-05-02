@@ -1,0 +1,1 @@
+ALTER TABLE "SlidecartTier" ADD COLUMN IF NOT EXISTS "rewardType" TEXT NOT NULL DEFAULT 'gift';

@@ -3,14 +3,6 @@
     "export": "cart-delivery-options-discounts-generate-run",
     "target": "cart.delivery-options.discounts.generate.run",
     "input": {
-      "cart": {
-        "cost": {
-          "subtotalAmount": {
-            "amount": "200.00"
-          }
-        },
-        "deliveryGroups": []
-      },
       "discount": {
         "discountClasses": ["SHIPPING"],
         "metafield": {
@@ -23,6 +15,18 @@
             ]
           }
         }
+      },
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "149.99"
+          }
+        },
+        "deliveryGroups": [
+          {
+            "id": "gid://shopify/CartDeliveryGroup/1"
+          }
+        ]
       }
     },
     "output": {

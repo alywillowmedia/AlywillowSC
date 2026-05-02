@@ -45,6 +45,55 @@
   align-items: end;
 }
 
+.rewardTypeRow {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303030;
+}
+
+.rewardTypeToggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  max-width: 320px;
+  border: 1px solid #c7c7c7;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.rewardTypeButton {
+  border: 0;
+  border-right: 1px solid #c7c7c7;
+  padding: 9px 12px;
+  background: #fff;
+  color: #303030;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.rewardTypeButton:last-child {
+  border-right: 0;
+}
+
+.rewardTypeButton:hover {
+  background: #f4f4f4;
+}
+
+.rewardTypeButtonActive {
+  background: #303030;
+  color: #fff;
+}
+
+.rewardTypeButtonActive:hover {
+  background: #303030;
+}
+
 .quickLabel {
   color: #666;
   font-size: 13px;
@@ -69,6 +118,18 @@
   background: #efefef;
 }
 
+.shippingPreviewIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+  color: #fff;
+  font-weight: 700;
+}
+
 .previewTitle {
   font-weight: 600;
 }
@@ -89,6 +150,15 @@
 
   .pickerRow {
     grid-template-columns: 1fr;
+  }
+
+  .rewardTypeRow {
+    max-width: none;
+  }
+
+  .rewardTypeToggle {
+    display: grid;
+    max-width: none;
   }
 
   .quickLabel {
