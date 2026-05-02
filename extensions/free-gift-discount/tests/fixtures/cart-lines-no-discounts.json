@@ -7,6 +7,7 @@
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
+            "freeGift": null,
             "cost": {
               "subtotalAmount": {
                 "amount": "100.0"

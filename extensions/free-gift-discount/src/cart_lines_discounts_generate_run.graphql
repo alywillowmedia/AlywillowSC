@@ -2,6 +2,9 @@ query CartInput {
   cart {
     lines {
       id
+      freeGift: attribute(key: "_awc_free_gift") {
+        value
+      }
       cost {
         subtotalAmount {
           amount

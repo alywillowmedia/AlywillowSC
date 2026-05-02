@@ -10,6 +10,7 @@
   let internalCartMutationDepth = 0;
   let optimisticMutationId = 0;
   let latestRenderedCart = null;
+  let pendingRewardChoice = '';
   const debugState = [];
   let lastGiftError = '';
   const soldOutGiftVariantIds = new Set();
@@ -275,6 +276,65 @@
     return recalculateCartTotals(nextCart);
   }
 
+  function setProjectedCartAttribute(cart, key, value) {
+    if (!isCartPayload(cart)) return cart;
+    if (!cart.attributes || Array.isArray(cart.attributes)) {
+      const attrs = Array.isArray(cart.attributes) ? [...cart.attributes] : [];
+      const existing = attrs.find((attr) => attr?.key === key);
+      if (existing) {
+        existing.value = value;
+      } else {
+        attrs.push({ key, value });
+      }
+      cart.attributes = attrs;
+      return cart;
+    }
+    cart.attributes = { ...cart.attributes, [key]: value };
+    return cart;
+  }
+
+  function projectCartRewardChoice(cart, choice, removeGiftLines = false) {
+    const nextCart = cloneCart(cart);
+    if (!nextCart) return null;
+    setProjectedCartAttribute(nextCart, REWARD_CHOICE_ATTR, choice);
+    if (removeGiftLines) {
+      nextCart.items = nextCart.items.filter((item) => !isGift(item));
+    }
+    return recalculateCartTotals(nextCart);
+  }
+
+  function projectCartGiftSelection(settings, cart, variantId) {
+    const nextCart = projectCartRewardChoice(cart, `gift:${variantId}`, false);
+    if (!nextCart) return null;
+
+    nextCart.items = nextCart.items.filter((item) => !isGift(item));
+
+    const tier = (settings.tiers || []).find((candidate) => {
+      return Number(candidate?.gift?.variantId) === Number(variantId);
+    });
+    const title = tier?.gift?.title || tier?.rewardLabel || 'Free gift';
+    const parts = splitGiftLabel(title);
+
+    nextCart.items.unshift({
+      key: `awc-gift-${variantId}`,
+      id: Number(variantId),
+      variant_id: Number(variantId),
+      quantity: 1,
+      product_title: parts.title || title,
+      variant_title: parts.variant || '',
+      image: tier?.gift?.image || '',
+      properties: { [FREE_GIFT_PROP]: '1' },
+      original_price: 0,
+      final_price: 0,
+      price: 0,
+      original_line_price: 0,
+      final_line_price: 0,
+      line_price: 0,
+    });
+
+    return recalculateCartTotals(nextCart);
+  }
+
   function renderOptimisticCart(settings, cart) {
     optimisticMutationId += 1;
     render(settings, cart, { optimistic: true });
@@ -341,6 +401,13 @@
     return choice.startsWith(SHIPPING_REWARD_PREFIX)
       ? choice.slice(SHIPPING_REWARD_PREFIX.length)
       : '';
+  }
+
+  function getGiftRewardVariantId(choice) {
+    const prefix = 'gift:';
+    return String(choice || '').startsWith(prefix)
+      ? Number(String(choice).slice(prefix.length))
+      : 0;
   }
 
   function shippingIconMarkup(className = 'awc-shipping-icon') {
@@ -899,8 +966,13 @@
     }
 
     const giftLine = currentCart.items.find(isGift);
-    const selectedGiftVariantId = giftLine ? Number(giftLine.variant_id) : 0;
-    const selectedShippingTierId = giftLine ? '' : getSelectedShippingTierId(currentCart);
+    const pendingGiftVariantId = getGiftRewardVariantId(pendingRewardChoice);
+    const selectedGiftVariantId = pendingGiftVariantId || (giftLine ? Number(giftLine.variant_id) : 0);
+    const selectedShippingTierId = pendingRewardChoice.startsWith(SHIPPING_REWARD_PREFIX)
+      ? pendingRewardChoice.slice(SHIPPING_REWARD_PREFIX.length)
+      : giftLine
+      ? ''
+      : getSelectedShippingTierId(currentCart);
 
     const lines = document.getElementById('awc-lines');
     if (lines) {
@@ -1063,34 +1135,51 @@
           const tierId = button.getAttribute('data-shipping-tier-id') || '';
           if (!tierId) return;
           const existingGift = currentCart.items.find(isGift);
+          const choice = `${SHIPPING_REWARD_PREFIX}${tierId}`;
+          pendingRewardChoice = choice;
+          const projectedCart = projectCartRewardChoice(latestRenderedCart || currentCart, choice, true);
+          const mutationId = projectedCart
+            ? renderOptimisticCart(settings, projectedCart)
+            : optimisticMutationId;
 
           await runCartOp(async () => {
             lastGiftError = '';
             debugLog('shipping_reward_click', { tierId, existingGiftKey: existingGift?.key || null });
-            const updateResult = await cartUpdateAttributes({
-              [REWARD_CHOICE_ATTR]: `${SHIPPING_REWARD_PREFIX}${tierId}`
-            });
-            debugLog('shipping_reward_update_result', {
-              ok: updateResult.ok,
-              status: updateResult.status
-            });
-
-            let cartAfterSelection = updateResult.ok && isCartPayload(updateResult.data)
-              ? updateResult.data
-              : null;
-
-            if (existingGift?.key) {
-              const removeResult = await cartChangeById(existingGift.key, 0);
-              debugLog('shipping_reward_remove_gift_result', {
-                ok: removeResult.ok,
-                status: removeResult.status
+            try {
+              const updateResult = await cartUpdateAttributes({
+                [REWARD_CHOICE_ATTR]: choice
               });
-              if (removeResult.ok && isCartPayload(removeResult.data)) {
-                cartAfterSelection = removeResult.data;
-              }
-            }
+              debugLog('shipping_reward_update_result', {
+                ok: updateResult.ok,
+                status: updateResult.status
+              });
 
-            await render(settings, cartAfterSelection || await cartGet());
+              let cartAfterSelection = updateResult.ok && isCartPayload(updateResult.data)
+                ? updateResult.data
+                : null;
+
+              if (existingGift?.key) {
+                const removeResult = await cartChangeById(existingGift.key, 0);
+                debugLog('shipping_reward_remove_gift_result', {
+                  ok: removeResult.ok,
+                  status: removeResult.status
+                });
+                if (removeResult.ok && isCartPayload(removeResult.data)) {
+                  cartAfterSelection = removeResult.data;
+                }
+              }
+
+              if (shouldRenderMutationResult(mutationId)) {
+                pendingRewardChoice = '';
+                await render(settings, cartAfterSelection || await cartGet());
+              }
+            } catch (error) {
+              if (shouldRenderMutationResult(mutationId)) {
+                pendingRewardChoice = '';
+                await render(settings);
+              }
+              throw error;
+            }
           });
         });
       });
@@ -1100,16 +1189,26 @@
           if (el.hasAttribute('data-shipping-tier-id')) return;
           const variantId = Number(el.getAttribute('data-gift-variant-id'));
           const existingGift = currentCart.items.find(isGift);
+          const choice = `gift:${variantId}`;
+          pendingRewardChoice = choice;
+          const projectedCart = projectCartGiftSelection(settings, latestRenderedCart || currentCart, variantId);
+          const mutationId = projectedCart
+            ? renderOptimisticCart(settings, projectedCart)
+            : optimisticMutationId;
+
           await runCartOp(async () => {
             lastGiftError = '';
             if (Date.now() < giftRateLimitUntil) {
               const secondsLeft = Math.max(1, Math.ceil((giftRateLimitUntil - Date.now()) / 1000));
               lastGiftError = `Too many attempts. Try again in ${secondsLeft}s.`;
+              if (shouldRenderMutationResult(mutationId)) pendingRewardChoice = '';
               await render(settings);
               return;
             }
             if (soldOutGiftVariantIds.has(variantId)) {
               debugLog('gift_click_blocked_sold_out_chip', { variantId });
+              if (shouldRenderMutationResult(mutationId)) pendingRewardChoice = '';
+              await render(settings);
               return;
             }
             debugLog('gift_click', {
@@ -1120,9 +1219,12 @@
             if (existingGift && Number(existingGift.variant_id) === variantId) {
               debugLog('gift_click_same_variant_noop', { variantId });
               const updateResult = await cartUpdateAttributes({
-                [REWARD_CHOICE_ATTR]: `gift:${variantId}`
+                [REWARD_CHOICE_ATTR]: choice
               });
-              await render(settings, updateResult.ok && isCartPayload(updateResult.data) ? updateResult.data : null);
+              if (shouldRenderMutationResult(mutationId)) {
+                pendingRewardChoice = '';
+                await render(settings, updateResult.ok && isCartPayload(updateResult.data) ? updateResult.data : null);
+              }
               return;
             }
             const addResult = await cartAddGift(variantId);
@@ -1149,6 +1251,7 @@
               if (failureText.includes('sold out') || failureText.includes('out of stock') || addResult.status === 422) {
                 soldOutGiftVariantIds.add(variantId);
               }
+              if (shouldRenderMutationResult(mutationId)) pendingRewardChoice = '';
               await render(settings);
               return;
             }
@@ -1169,7 +1272,7 @@
               }
             }
             const rewardChoiceResult = await cartUpdateAttributes({
-              [REWARD_CHOICE_ATTR]: `gift:${variantId}`
+              [REWARD_CHOICE_ATTR]: choice
             });
             const postCart = rewardChoiceResult.ok && isCartPayload(rewardChoiceResult.data)
               ? rewardChoiceResult.data
@@ -1179,7 +1282,10 @@
               itemCount: postCart.item_count,
               subtotal: postCart.items_subtotal_price
             });
-            await render(settings, postCart);
+            if (shouldRenderMutationResult(mutationId)) {
+              pendingRewardChoice = '';
+              await render(settings, postCart);
+            }
           });
         });
       });

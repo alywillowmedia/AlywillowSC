@@ -1,6 +1,5 @@
 import {
   DiscountClass,
-  OrderDiscountSelectionStrategy,
   ProductDiscountSelectionStrategy,
   CartInput,
   CartLinesDiscountsGenerateRunResult,
@@ -25,56 +24,23 @@ export function cartLinesDiscountsGenerateRun(
     return {operations: []};
   }
 
-  const maxCartLine = input.cart.lines.reduce((maxLine, line) => {
-    if (line.cost.subtotalAmount.amount > maxLine.cost.subtotalAmount.amount) {
-      return line;
-    }
-    return maxLine;
-  }, input.cart.lines[0]);
-
   const operations = [];
+  const giftLines = input.cart.lines.filter((line) => line.freeGift?.value === '1');
 
-  if (hasOrderDiscountClass) {
-    operations.push({
-      orderDiscountsAdd: {
-        candidates: [
-          {
-            message: '10% OFF ORDER',
-            targets: [
-              {
-                orderSubtotal: {
-                  excludedCartLineIds: [],
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: 10,
-              },
-            },
-          },
-        ],
-        selectionStrategy: OrderDiscountSelectionStrategy.First,
-      },
-    });
-  }
-
-  if (hasProductDiscountClass) {
+  if (hasProductDiscountClass && giftLines.length) {
     operations.push({
       productDiscountsAdd: {
         candidates: [
           {
-            message: '20% OFF PRODUCT',
-            targets: [
-              {
-                cartLine: {
-                  id: maxCartLine.id,
-                },
+            message: 'Free gift',
+            targets: giftLines.map((line) => ({
+              cartLine: {
+                id: line.id,
               },
-            ],
+            })),
             value: {
               percentage: {
-                value: 20,
+                value: 100,
               },
             },
           },

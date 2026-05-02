@@ -7,6 +7,9 @@
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
+            "freeGift": {
+              "value": "1"
+            },
             "cost": {
               "subtotalAmount": {
                 "amount": "100.0"
@@ -25,7 +28,7 @@
           "productDiscountsAdd": {
             "candidates": [
               {
-                "message": "20% OFF PRODUCT",
+                "message": "Free gift",
                 "targets": [
                   {
                     "cartLine": {
@@ -35,7 +38,7 @@
                 ],
                 "value": {
                   "percentage": {
-                    "value": 20.0
+                    "value": 100.0
                   }
                 }
               }

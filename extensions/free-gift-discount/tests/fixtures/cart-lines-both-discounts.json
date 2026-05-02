@@ -7,6 +7,9 @@
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
+            "freeGift": {
+              "value": "1"
+            },
             "cost": {
               "subtotalAmount": {
                 "amount": "6.0"
@@ -23,32 +26,10 @@
     "output": {
       "operations": [
         {
-          "orderDiscountsAdd": {
-            "candidates": [
-              {
-                "message": "10% OFF ORDER",
-                "targets": [
-                  {
-                    "orderSubtotal": {
-                      "excludedCartLineIds": []
-                    }
-                  }
-                ],
-                "value": {
-                  "percentage": {
-                    "value": 10.0
-                  }
-                }
-              }
-            ],
-            "selectionStrategy": "FIRST"
-          }
-        },
-        {
           "productDiscountsAdd": {
             "candidates": [
               {
-                "message": "20% OFF PRODUCT",
+                "message": "Free gift",
                 "targets": [
                   {
                     "cartLine": {
@@ -58,7 +39,7 @@
                 ],
                 "value": {
                   "percentage": {
-                    "value": 20.0
+                    "value": 100.0
                   }
                 }
               }
