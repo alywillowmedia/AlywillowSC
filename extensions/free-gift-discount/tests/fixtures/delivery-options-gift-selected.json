@@ -23,10 +23,16 @@
         },
         "cost": {
           "subtotalAmount": {
-            "amount": "149.99"
+            "amount": "200.00"
           }
         },
-        "lines": [],
+        "lines": [
+          {
+            "freeGift": {
+              "value": "1"
+            }
+          }
+        ],
         "deliveryGroups": [
           {
             "id": "gid://shopify/CartDeliveryGroup/1"

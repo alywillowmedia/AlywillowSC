@@ -9,6 +9,7 @@
           "jsonValue": {
             "tiers": [
               {
+                "id": "tier-1",
                 "requiredSubtotalCents": 15000,
                 "rewardLabel": "Free shipping"
               }
@@ -17,11 +18,15 @@
         }
       },
       "cart": {
+        "selectedReward": {
+          "value": "shipping:tier-1"
+        },
         "cost": {
           "subtotalAmount": {
             "amount": "200.00"
           }
         },
+        "lines": [],
         "deliveryGroups": [
           {
             "id": "gid://shopify/CartDeliveryGroup/1"

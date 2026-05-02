@@ -6,9 +6,12 @@ import {
 } from "../generated/api";
 
 type ShippingTierConfig = {
+  id?: string;
   requiredSubtotalCents?: number;
   rewardLabel?: string;
 };
+
+const SHIPPING_REWARD_PREFIX = 'shipping:';
 
 function toCents(amount: unknown) {
   const parsed = Number(amount);
@@ -22,6 +25,7 @@ function getShippingTiers(input: DeliveryInput): ShippingTierConfig[] {
 
   return tiers
     .map((tier: any) => ({
+      id: String(tier?.id || ''),
       requiredSubtotalCents: Number(tier?.requiredSubtotalCents || 0),
       rewardLabel: String(tier?.rewardLabel || 'Free shipping'),
     }))
@@ -35,7 +39,16 @@ function getShippingTiers(input: DeliveryInput): ShippingTierConfig[] {
 
 function getUnlockedShippingTier(input: DeliveryInput) {
   const subtotalCents = toCents((input as any)?.cart?.cost?.subtotalAmount?.amount);
+  const selectedReward = String((input as any)?.cart?.selectedReward?.value || '');
+  if (!selectedReward.startsWith(SHIPPING_REWARD_PREFIX)) return null;
+
+  const selectedTierId = selectedReward.slice(SHIPPING_REWARD_PREFIX.length);
+  const hasFreeGift = Array.isArray((input as any)?.cart?.lines)
+    && (input as any).cart.lines.some((line: any) => String(line?.freeGift?.value || '') === '1');
+  if (hasFreeGift) return null;
+
   return getShippingTiers(input).reduce<ShippingTierConfig | null>((unlocked, tier) => {
+    if (tier.id && tier.id !== selectedTierId) return unlocked;
     return subtotalCents >= Number(tier.requiredSubtotalCents || 0) ? tier : unlocked;
   }, null);
 }

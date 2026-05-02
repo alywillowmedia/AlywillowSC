@@ -4,11 +4,15 @@
     "target": "cart.delivery-options.discounts.generate.run",
     "input": {
       "cart": {
+        "selectedReward": {
+          "value": "shipping:tier-1"
+        },
         "cost": {
           "subtotalAmount": {
             "amount": "200.00"
           }
         },
+        "lines": [],
         "deliveryGroups": []
       },
       "discount": {
@@ -17,6 +21,7 @@
           "jsonValue": {
             "tiers": [
               {
+                "id": "tier-1",
                 "requiredSubtotalCents": 15000,
                 "rewardLabel": "Free shipping"
               }

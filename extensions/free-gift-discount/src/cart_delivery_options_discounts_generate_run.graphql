@@ -1,8 +1,16 @@
 query DeliveryInput {
   cart {
+    selectedReward: attribute(key: "_awc_reward_choice") {
+      value
+    }
     cost {
       subtotalAmount {
         amount
+      }
+    }
+    lines {
+      freeGift: attribute(key: "_awc_free_gift") {
+        value
       }
     }
     deliveryGroups {

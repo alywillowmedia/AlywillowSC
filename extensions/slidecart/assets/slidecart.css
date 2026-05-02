@@ -163,6 +163,34 @@
   border-color: #111;
 }
 
+.awc-tier-stop.is-shipping .awc-tier-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f7f3;
+  color: #166534;
+}
+
+.awc-tier-stop.is-shipping.active .awc-tier-thumb {
+  border-color: #166534;
+}
+
+.awc-tier-shipping-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.awc-tier-stop.is-shipping .awc-tier-name {
+  display: block;
+  margin-top: 2px;
+  color: #166534;
+}
+
 .awc-tier-stop.just-unlocked .awc-tier-thumb {
   box-shadow: 0 0 0 4px rgba(17, 17, 17, 0.08);
   animation: awc-pulse 900ms ease-out;
@@ -373,8 +401,42 @@
 }
 
 .awc-gifts,
+.awc-shipping-reward,
 .awc-custom {
   margin: 8px 0;
+}
+
+.awc-shipping-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  background: #fff;
+  color: #444;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.awc-shipping-reward.is-unlocked {
+  border-color: #b7ebc8;
+  background: #e9f8ee;
+  color: #166534;
+}
+
+.awc-shipping-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .awc-gifts {
@@ -436,7 +498,8 @@
 }
 
 .awc-gift-btn img,
-.awc-gift-img-fallback {
+.awc-gift-img-fallback,
+.awc-gift-shipping-icon {
   width: 24px;
   height: 24px;
   border-radius: 999px;
@@ -456,6 +519,24 @@
   color: #555;
   font-size: 11px;
   font-weight: 700;
+}
+
+.awc-gift-shipping-icon {
+  padding: 3px;
+  border: 1px solid #b7ebc8;
+  background: #e9f8ee;
+  color: #166534;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.awc-shipping-btn.is-selected .awc-gift-shipping-icon {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .awc-gift-btn.is-selected .awc-gift-img-fallback {

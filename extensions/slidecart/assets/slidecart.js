@@ -3,6 +3,8 @@
 
   const ROOT_ID = 'awc-slidecart-root';
   const FREE_GIFT_PROP = '_awc_free_gift';
+  const REWARD_CHOICE_ATTR = '_awc_reward_choice';
+  const SHIPPING_REWARD_PREFIX = 'shipping:';
   const DEBUG_MODE = new URLSearchParams(window.location.search).has('awc_debug');
   let cartOpQueue = Promise.resolve();
   let internalCartMutationDepth = 0;
@@ -173,6 +175,24 @@
     });
   }
 
+  async function cartUpdateAttributes(attributes) {
+    return withInternalCartMutation(async () => {
+      const res = await fetch('/cart/update.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attributes })
+      });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = { raw: text };
+      }
+      return { ok: res.ok, status: res.status, data: json };
+    });
+  }
+
   async function withInternalCartMutation(fn) {
     internalCartMutationDepth += 1;
     try {
@@ -302,6 +322,38 @@
     return item?.properties?.[FREE_GIFT_PROP] === '1';
   }
 
+  function isFreeShippingTier(tier) {
+    return tier?.rewardType === 'free_shipping';
+  }
+
+  function getCartAttribute(cart, key) {
+    const attrs = cart?.attributes;
+    if (!attrs) return '';
+    if (Array.isArray(attrs)) {
+      const pair = attrs.find((attr) => attr?.key === key);
+      return pair?.value || '';
+    }
+    return attrs[key] || '';
+  }
+
+  function getSelectedShippingTierId(cart) {
+    const choice = String(getCartAttribute(cart, REWARD_CHOICE_ATTR) || '');
+    return choice.startsWith(SHIPPING_REWARD_PREFIX)
+      ? choice.slice(SHIPPING_REWARD_PREFIX.length)
+      : '';
+  }
+
+  function shippingIconMarkup(className = 'awc-shipping-icon') {
+    return `
+      <svg class="${className}" aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M3 6.5h11v10H3z"></path>
+        <path d="M14 10h3.4l2.6 3.2v3.3h-6z"></path>
+        <circle cx="7" cy="18" r="1.8"></circle>
+        <circle cx="17" cy="18" r="1.8"></circle>
+      </svg>
+    `;
+  }
+
   function tierPercent(subtotal, tiers) {
     if (!tiers.length) return 0;
     const maxRaw = Number(tiers[tiers.length - 1]?.requiredSubtotalCents);
@@ -322,11 +374,13 @@
       // Center marker under each segment for cleaner visual distribution.
       const segmentIndex = Number(tier.id?.split('-')?.[1] || 1) - 1;
       const leftPct = ((segmentIndex + 0.5) / count) * 100;
-      const image = tier?.gift?.image
+      const image = isFreeShippingTier(tier)
+        ? shippingIconMarkup('awc-tier-shipping-icon')
+        : tier?.gift?.image
         ? `<img src="${escapeHtml(tier.gift.image)}" alt="${escapeHtml(tier.rewardLabel)}" />`
         : `<span class="awc-tier-fallback">${escapeHtml((tier.rewardLabel || '?').charAt(0))}</span>`;
       return `
-        <div class="awc-tier-stop ${active ? 'active' : ''} ${tier.id === justUnlockedTierId ? 'just-unlocked' : ''}" style="left:${leftPct}%;">
+        <div class="awc-tier-stop ${isFreeShippingTier(tier) ? 'is-shipping' : ''} ${active ? 'active' : ''} ${tier.id === justUnlockedTierId ? 'just-unlocked' : ''}" style="left:${leftPct}%;">
           <div class="awc-tier-amount">${money(tier.requiredSubtotalCents, settings.currency)}</div>
           <div class="awc-tier-thumb">${image}</div>
           ${tier.id === justUnlockedTierId ? '<div class="awc-unlock-check" aria-hidden="true">✓</div>' : ''}
@@ -692,25 +746,45 @@
     return didChange;
   }
 
-  function buildGiftButtons(settings, subtotal, selectedGift) {
-    const eligible = settings.tiers.filter((tier) => {
-      return tier?.rewardType !== 'free_shipping'
+  function buildGiftButtons(settings, subtotal, selectedGift, selectedShippingTierId) {
+    const eligibleGifts = settings.tiers.filter((tier) => {
+      return !isFreeShippingTier(tier)
         && subtotal >= tier.requiredSubtotalCents
         && Number(tier?.gift?.variantId) > 0;
     });
-    if (!eligible.length) return '';
-    const ordered = eligible.sort((a, b) => {
+    const eligibleShipping = settings.tiers.filter((tier) => {
+      return isFreeShippingTier(tier) && subtotal >= tier.requiredSubtotalCents;
+    });
+    if (!eligibleGifts.length && !eligibleShipping.length) return '';
+    const orderedGifts = eligibleGifts.sort((a, b) => {
       if (Number(a.gift.variantId) === selectedGift) return -1;
       if (Number(b.gift.variantId) === selectedGift) return 1;
       return 0;
     });
+    const orderedShipping = eligibleShipping.sort((a, b) => {
+      if (a.id === selectedShippingTierId) return -1;
+      if (b.id === selectedShippingTierId) return 1;
+      return Number(b.requiredSubtotalCents || 0) - Number(a.requiredSubtotalCents || 0);
+    });
 
     return `
       <div class="awc-gifts">
-        <strong>Free gift:</strong>
+        <strong>Choose reward:</strong>
         ${lastGiftError ? `<div class="awc-gift-error">${escapeHtml(lastGiftError)}</div>` : ''}
         <div class="awc-gift-row">
-          ${ordered.map((tier) => `
+          ${orderedShipping.map((tier) => `
+            <button
+              class="awc-gift-btn awc-shipping-btn ${selectedShippingTierId === tier.id ? 'is-selected' : ''}"
+              data-shipping-tier-id="${escapeHtml(tier.id)}"
+            >
+              ${shippingIconMarkup('awc-gift-shipping-icon')}
+              <span class="awc-gift-text">
+                <span class="awc-gift-title">${escapeHtml(tier.rewardLabel || 'Free shipping')}</span>
+                <span class="awc-gift-variant">${selectedShippingTierId === tier.id ? 'Selected' : 'Free shipping'}</span>
+              </span>
+            </button>
+          `).join('')}
+          ${orderedGifts.map((tier) => `
             ${(() => {
               const parts = splitGiftLabel(tier.gift.title);
               return `
@@ -734,6 +808,37 @@
         </div>
       </div>
     `;
+  }
+
+  function buildFreeShippingStatus(settings, subtotal) {
+    const shippingTiers = settings.tiers.filter(isFreeShippingTier);
+    if (!shippingTiers.length) return '';
+
+    const unlocked = shippingTiers
+      .filter((tier) => subtotal >= tier.requiredSubtotalCents)
+      .sort((a, b) => b.requiredSubtotalCents - a.requiredSubtotalCents)[0];
+    const next = shippingTiers
+      .filter((tier) => subtotal < tier.requiredSubtotalCents)
+      .sort((a, b) => a.requiredSubtotalCents - b.requiredSubtotalCents)[0];
+
+    if (unlocked) return '';
+
+    if (!next) return '';
+
+    return `
+      <div class="awc-shipping-reward">
+        ${shippingIconMarkup()}
+        <span>${money(next.requiredSubtotalCents - subtotal, settings.currency)} away from ${escapeHtml(next.rewardLabel || 'free shipping')}</span>
+      </div>
+    `;
+  }
+
+  function hasEligibleGiftOptions(settings, subtotal) {
+    return settings.tiers.some((tier) => {
+      return !isFreeShippingTier(tier)
+        && subtotal >= tier.requiredSubtotalCents
+        && Number(tier?.gift?.variantId) > 0;
+    });
   }
 
   async function render(settings, cartOverride = null, options = {}) {
@@ -795,6 +900,7 @@
 
     const giftLine = currentCart.items.find(isGift);
     const selectedGiftVariantId = giftLine ? Number(giftLine.variant_id) : 0;
+    const selectedShippingTierId = giftLine ? '' : getSelectedShippingTierId(currentCart);
 
     const lines = document.getElementById('awc-lines');
     if (lines) {
@@ -802,8 +908,14 @@
         const secondsLeft = Math.max(1, Math.ceil((giftRateLimitUntil - Date.now()) / 1000));
         lastGiftError = `Too many attempts. Try again in ${secondsLeft}s.`;
       }
+      const shippingStatus = buildFreeShippingStatus(settings, subtotal);
+      const giftButtons = buildGiftButtons(settings, subtotal, selectedGiftVariantId, selectedShippingTierId);
+      const customText = hasEligibleGiftOptions(settings, subtotal) && settings.customText
+        ? `<div class="awc-custom">${escapeHtml(settings.customText)}</div>`
+        : '';
       lines.innerHTML = `
-        ${buildGiftButtons(settings, subtotal, selectedGiftVariantId)}
+        ${shippingStatus}
+        ${giftButtons}
         ${currentCart.items.length === 0 ? `
           <div class="awc-empty">
             <p>Your cart is empty.</p>
@@ -865,7 +977,7 @@
             </button>
           ` : '');
         })()}
-        <div class="awc-custom">${escapeHtml(settings.customText)}</div>
+        ${customText}
       `;
 
       lines.querySelectorAll('[data-toggle-lines]').forEach((toggle) => {
@@ -945,8 +1057,47 @@
         });
       });
 
+      lines.querySelectorAll('[data-shipping-tier-id]').forEach((el) => {
+        el.addEventListener('click', async () => {
+          const button = el;
+          const tierId = button.getAttribute('data-shipping-tier-id') || '';
+          if (!tierId) return;
+          const existingGift = currentCart.items.find(isGift);
+
+          await runCartOp(async () => {
+            lastGiftError = '';
+            debugLog('shipping_reward_click', { tierId, existingGiftKey: existingGift?.key || null });
+            const updateResult = await cartUpdateAttributes({
+              [REWARD_CHOICE_ATTR]: `${SHIPPING_REWARD_PREFIX}${tierId}`
+            });
+            debugLog('shipping_reward_update_result', {
+              ok: updateResult.ok,
+              status: updateResult.status
+            });
+
+            let cartAfterSelection = updateResult.ok && isCartPayload(updateResult.data)
+              ? updateResult.data
+              : null;
+
+            if (existingGift?.key) {
+              const removeResult = await cartChangeById(existingGift.key, 0);
+              debugLog('shipping_reward_remove_gift_result', {
+                ok: removeResult.ok,
+                status: removeResult.status
+              });
+              if (removeResult.ok && isCartPayload(removeResult.data)) {
+                cartAfterSelection = removeResult.data;
+              }
+            }
+
+            await render(settings, cartAfterSelection || await cartGet());
+          });
+        });
+      });
+
       lines.querySelectorAll('.awc-gift-btn').forEach((el) => {
         el.addEventListener('click', async () => {
+          if (el.hasAttribute('data-shipping-tier-id')) return;
           const variantId = Number(el.getAttribute('data-gift-variant-id'));
           const existingGift = currentCart.items.find(isGift);
           await runCartOp(async () => {
@@ -968,7 +1119,10 @@
             });
             if (existingGift && Number(existingGift.variant_id) === variantId) {
               debugLog('gift_click_same_variant_noop', { variantId });
-              await render(settings);
+              const updateResult = await cartUpdateAttributes({
+                [REWARD_CHOICE_ATTR]: `gift:${variantId}`
+              });
+              await render(settings, updateResult.ok && isCartPayload(updateResult.data) ? updateResult.data : null);
               return;
             }
             const addResult = await cartAddGift(variantId);
@@ -1014,7 +1168,12 @@
                 cartAfterGiftChange = removeResult.data;
               }
             }
-            const postCart = cartAfterGiftChange || await cartGet();
+            const rewardChoiceResult = await cartUpdateAttributes({
+              [REWARD_CHOICE_ATTR]: `gift:${variantId}`
+            });
+            const postCart = rewardChoiceResult.ok && isCartPayload(rewardChoiceResult.data)
+              ? rewardChoiceResult.data
+              : cartAfterGiftChange || await cartGet();
             debugLog('post_cart_gifts', {
               giftVariantIds: (postCart.items || []).filter(isGift).map((i) => i.variant_id),
               itemCount: postCart.item_count,
