@@ -52,6 +52,7 @@ type LoaderData = {
 type ActionData = {
   ok: boolean;
   error?: string;
+  warning?: string;
 };
 
 const REWARD_TYPE_GIFT = 'gift';
@@ -186,6 +187,9 @@ async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
     }
   `);
   const existingJson = await existingResponse.json();
+  if (existingJson?.errors?.length) {
+    throw new Error(existingJson.errors.map((error: any) => error.message).join(', '));
+  }
   const existingDiscount = (existingJson?.data?.discountNodes?.nodes ?? []).find((node: any) => {
     return node?.discount?.title === SHIPPING_DISCOUNT_TITLE;
   });
@@ -249,6 +253,9 @@ async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
       : { variables: { automaticAppDiscount } },
   );
   const json = await response.json();
+  if (json?.errors?.length) {
+    throw new Error(json.errors.map((error: any) => error.message).join(', '));
+  }
   const payload = existingDiscount?.id
     ? json?.data?.discountAutomaticAppUpdate
     : json?.data?.discountAutomaticAppCreate;
@@ -411,7 +418,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 
   await saveSlidecartSettings(session.shop, normalizedSettings);
-  await syncFreeShippingDiscount(admin, normalizedSettings);
+
+  try {
+    await syncFreeShippingDiscount(admin, normalizedSettings);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Shopify discount sync error';
+    return {
+      ok: true,
+      warning: `Settings saved, but free shipping discount sync failed: ${message}`,
+    } satisfies ActionData;
+  }
 
   return { ok: true } satisfies ActionData;
 };
@@ -428,6 +444,9 @@ export default function AppIndex() {
   useEffect(() => {
     if (fetcher.data?.ok) {
       shopify.toast.show('Slidecart settings saved');
+      if (fetcher.data.warning) {
+        shopify.toast.show(fetcher.data.warning, { isError: true });
+      }
     }
     if (fetcher.data && !fetcher.data.ok && fetcher.data.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
@@ -630,6 +649,8 @@ export default function AppIndex() {
                     <s-button onClick={() => pickTierGift(index)}>Search & select gift in Shopify</s-button>
                     <span className={styles.quickLabel}>or quick select:</span>
                     <s-select
+                      label="Quick select gift"
+                      labelAccessibilityVisibility="exclusive"
                       value={tier.giftVariantId}
                       onChange={(e) => {
                         const selected = variantOptions.find((v) => v.value === e.currentTarget.value);
