@@ -202,9 +202,9 @@ async function syncFreeShippingDiscount(admin: any, settings: SettingsForm) {
     discountClasses: ['SHIPPING'],
     startsAt: new Date().toISOString(),
     combinesWith: {
-      orderDiscounts: true,
-      productDiscounts: true,
-      shippingDiscounts: true,
+      orderDiscounts: false,
+      productDiscounts: false,
+      shippingDiscounts: false,
     },
     metafields: [
       {
