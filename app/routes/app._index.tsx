@@ -36,6 +36,7 @@ type SettingsForm = {
   cartTitle: string;
   customText: string;
   progressIntro: string;
+  giftChooserText: string;
   discountCtaNote: string;
   maxFreeGifts: number;
   buttonFillColor: string;
@@ -68,6 +69,7 @@ function toFormSettings(settings: Awaited<ReturnType<typeof getOrCreateSlidecart
     cartTitle: settings.cartTitle,
     customText: settings.customText,
     progressIntro: settings.progressIntro,
+    giftChooserText: settings.giftChooserText,
     discountCtaNote: settings.discountCtaNote,
     maxFreeGifts: settings.maxFreeGifts,
     buttonFillColor: settings.buttonFillColor,
@@ -410,6 +412,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       cartTitle: String(payload.cartTitle || 'Your Cart'),
       customText: String(payload.customText || ''),
       progressIntro: String(payload.progressIntro || "You're only [amount] away from getting [reward] for free!"),
+      giftChooserText: String(payload.giftChooserText || 'Choose reward:'),
       discountCtaNote: String(payload.discountCtaNote || 'Add discount code at checkout'),
       maxFreeGifts: 1,
       buttonFillColor: String(payload.buttonFillColor || '#000000'),
@@ -558,6 +561,12 @@ export default function AppIndex() {
             label="Progress text (use [amount] and [reward])"
             value={form.progressIntro}
             onChange={(e) => setForm((c) => ({ ...c, progressIntro: e.currentTarget.value }))}
+          />
+
+          <s-text-field
+            label="Reward chooser heading"
+            value={form.giftChooserText}
+            onChange={(e) => setForm((c) => ({ ...c, giftChooserText: e.currentTarget.value }))}
           />
 
           <s-text-area

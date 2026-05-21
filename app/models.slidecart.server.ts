@@ -18,6 +18,7 @@ export type SlidecartSettingsInput = {
   cartTitle: string;
   customText: string;
   progressIntro: string;
+  giftChooserText: string;
   discountCtaNote: string;
   maxFreeGifts: number;
   buttonFillColor: string;
@@ -82,6 +83,7 @@ const DEFAULT_SETTINGS: Omit<SlidecartSettingsInput, 'tiers'> = {
   cartTitle: 'Your Cart',
   customText: 'Choose ONE free gift! *Qualifying orders only.*',
   progressIntro: "You're only [amount] away from getting [reward] for free!",
+  giftChooserText: 'Choose reward:',
   discountCtaNote: 'Add discount code at checkout',
   maxFreeGifts: 1,
   buttonFillColor: '#000000',
@@ -129,6 +131,7 @@ export async function saveSlidecartSettings(shop: string, input: SlidecartSettin
         cartTitle: input.cartTitle,
         customText: input.customText,
         progressIntro: input.progressIntro,
+        giftChooserText: input.giftChooserText,
         discountCtaNote: input.discountCtaNote,
         maxFreeGifts: input.maxFreeGifts,
         buttonFillColor: input.buttonFillColor,
@@ -166,6 +169,7 @@ export function settingsToProxyConfig(settings: Awaited<ReturnType<typeof getOrC
     cartTitle: settings.cartTitle,
     customText: settings.customText,
     progressIntro: settings.progressIntro,
+    giftChooserText: settings.giftChooserText,
     discountCtaNote: settings.discountCtaNote,
     maxFreeGifts: settings.maxFreeGifts,
     buttonFillColor: settings.buttonFillColor,

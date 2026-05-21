@@ -43,6 +43,7 @@ model SlidecartSettings {
   cartTitle           String          @default("Your Cart")
   customText          String          @default("Choose ONE free gift! *Qualifying orders only.*")
   progressIntro       String          @default("You're only [amount] away from getting [reward] for free!")
+  giftChooserText     String          @default("Choose reward:")
   discountCtaNote     String          @default("Add discount code at checkout")
   maxFreeGifts        Int             @default(1)
   buttonFillColor     String          @default("#000000")

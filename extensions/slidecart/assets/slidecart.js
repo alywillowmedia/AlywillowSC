@@ -69,6 +69,7 @@
       cartTitle: root.dataset.cartTitle || 'Your Cart',
       customText: root.dataset.customText || '',
       progressIntro: root.dataset.progressIntro || "You're only {{amount}} away from getting a {{reward}} for free!",
+      giftChooserText: root.dataset.giftChooserText || 'Choose reward:',
       discountCtaNote: 'Add discount code at checkout',
       enabled: true,
       buttonFillColor: '#000000',
@@ -366,10 +367,13 @@
     if (!settings.tiers?.length) return 'Add items to start building your cart.';
     if (!progress.next && progress.unlocked) return 'All free gift tiers unlocked. Choose your favorite free gift.';
     if (!progress.next) return 'All free gifts unlocked.';
-    if (progress.remaining <= 500) {
-      return `${money(progress.remaining, settings.currency)} more for ${progress.next.rewardLabel}.`;
-    }
-    return `Add ${money(progress.remaining, settings.currency)} to unlock ${progress.next.rewardLabel}.`;
+    return formatTemplate(
+      settings.progressIntro || 'Add [amount] to unlock [reward].',
+      {
+        amount: money(progress.remaining, settings.currency),
+        reward: progress.next.rewardLabel,
+      },
+    );
   }
 
   function lineDiscount(item) {
@@ -506,6 +510,12 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function formatTemplate(template, values) {
+    return String(template || '')
+      .replace(/\[amount\]|\{\{\s*amount\s*\}\}/g, values.amount || '')
+      .replace(/\[reward\]|\{\{\s*reward\s*\}\}/g, values.reward || '');
   }
 
   function cleanVariantLabel(value) {
@@ -836,9 +846,13 @@
 
     return `
       <div class="awc-gifts">
-        <strong>Choose reward:</strong>
+        <strong>${escapeHtml(settings.giftChooserText || 'Choose reward:')}</strong>
         ${lastGiftError ? `<div class="awc-gift-error">${escapeHtml(lastGiftError)}</div>` : ''}
-        <div class="awc-gift-row">
+        <div class="awc-gift-row-wrapper">
+          <button type="button" class="awc-gift-scroll-btn awc-gift-scroll-left" aria-label="Scroll left">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="awc-gift-row">
           ${orderedShipping.map((tier) => `
             <button
               class="awc-gift-btn awc-shipping-btn ${selectedShippingTierId === tier.id ? 'is-selected' : ''}"
@@ -872,6 +886,10 @@
             `;
             })()}
           `).join('')}
+          </div>
+          <button type="button" class="awc-gift-scroll-btn awc-gift-scroll-right" aria-label="Scroll right">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
         </div>
       </div>
     `;
@@ -1051,6 +1069,44 @@
         })()}
         ${customText}
       `;
+
+      lines.querySelectorAll('.awc-gift-scroll-left').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.awc-gift-row-wrapper').querySelector('.awc-gift-row');
+          if (row) row.scrollBy({ left: -180, behavior: 'smooth' });
+        });
+      });
+
+      lines.querySelectorAll('.awc-gift-scroll-right').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.awc-gift-row-wrapper').querySelector('.awc-gift-row');
+          if (row) row.scrollBy({ left: 180, behavior: 'smooth' });
+        });
+      });
+
+      lines.querySelectorAll('.awc-gift-row-wrapper').forEach((wrapper) => {
+        const row = wrapper.querySelector('.awc-gift-row');
+        const leftBtn = wrapper.querySelector('.awc-gift-scroll-left');
+        const rightBtn = wrapper.querySelector('.awc-gift-scroll-right');
+        if (!row || !leftBtn || !rightBtn) return;
+        
+        const updateButtons = () => {
+          if (row.scrollLeft <= 5) leftBtn.classList.add('is-hidden');
+          else leftBtn.classList.remove('is-hidden');
+          
+          if (row.scrollWidth - row.clientWidth - row.scrollLeft <= 5) {
+            rightBtn.classList.add('is-hidden');
+          } else {
+            rightBtn.classList.remove('is-hidden');
+          }
+        };
+        
+        row.addEventListener('scroll', updateButtons, { passive: true });
+        // Initial check needs a slight delay so DOM has widths
+        requestAnimationFrame(() => {
+          setTimeout(updateButtons, 50);
+        });
+      });
 
       lines.querySelectorAll('[data-toggle-lines]').forEach((toggle) => {
         toggle.addEventListener('click', async () => {
